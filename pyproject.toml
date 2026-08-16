@@ -13,5 +13,5 @@ dependencies = ["Pillow>=9.0"]
 Repository = "https://github.com/Wumihaze/ComfyUI-AssetManager"
 
 [tool.comfy]
-PublisherId = "Wumihaze"
+PublisherId = "wumihaze"
 DisplayName = "ComfyUI-AssetManager"
