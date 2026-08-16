@@ -440,12 +440,13 @@ def delete_run(archive_dir, output_dir, state, run_id):
         pass
     shutil.rmtree(run_dir)
     if source_rel and out:
-        src = out / source_rel
-        try:
-            if src.is_file():
+        src = (out / source_rel).resolve()
+        # 防穿越: source_rel 必须解析后仍位于 output 目录内
+        if str(src).startswith(str(out) + os.sep) and src.is_file():
+            try:
                 src.unlink()
-        except Exception:
-            pass
+            except Exception:
+                pass
         state.pop(source_rel, None)
     save_state(archive_dir, state)
     return {"ok": True, "source_rel": source_rel}

@@ -265,9 +265,33 @@ async def asset_workflow(request):
     })
 
 
+def _browsable_roots():
+    """允许浏览的目录根(输出/归档/备份目录), 防止浏览任意系统目录"""
+    roots = []
+    out = _current_output_dir()
+    if out:
+        roots.append(os.path.abspath(out))
+    roots.append(os.path.abspath(_arch))
+    bak = (_cfg.get("backup_dir") or "").strip() or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "..", "asset_backups")
+    roots.append(os.path.abspath(bak))
+    return [r.lower() for r in roots]
+
+
+def _is_browsable(path):
+    """path 必须在允许目录内, 或是某个允许目录的父级链上(用于从盘符导航)"""
+    p = os.path.abspath(path).lower()
+    if len(p) <= 3:  # 驱动器根, 允许作为起点
+        return True
+    for r in _browsable_roots():
+        if p == r or p.startswith(r + os.sep) or r.startswith(p + os.sep):
+            return True
+    return False
+
+
 @PromptServer.instance.routes.get("/asset/browse_dir")
 async def asset_browse_dir(request):
-    """浏览文件系统目录(供设置里的「浏览…」按钮用)"""
+    """浏览文件系统目录(供设置里的「浏览…」按钮用), 仅限输出/归档/备份目录及其父级链"""
     import string
     path = request.rel_url.query.get("path", "")
     try:
@@ -277,6 +301,8 @@ async def asset_browse_dir(request):
         path = os.path.abspath(path)
         if not os.path.isdir(path):
             return web.json_response({"ok": False, "error": "目录不存在"})
+        if not _is_browsable(path):
+            return web.json_response({"ok": False, "error": "该目录不在允许浏览范围内"})
         parent = os.path.dirname(path)
         if parent == path:
             parent = None
