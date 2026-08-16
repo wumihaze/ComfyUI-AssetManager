@@ -84,7 +84,7 @@ app.registerExtension({
     const styleEl = $el("style", { textContent: STYLE });
     (document.head || document.documentElement).appendChild(styleEl);
 
-    // 自动修复: 连线被设成 Hidden(-1) 时改回 Spline(2), 并同步设置存储
+    // 自动修复: 连线渲染模式被设成 Hidden(-1) 时改回 Spline(2)
     function fixLinkRenderMode() {
       try {
         const g = window.comfyAPI.app.app.rootGraphInternal;
@@ -99,7 +99,7 @@ app.registerExtension({
       } catch (e) {}
     }
     setTimeout(fixLinkRenderMode, 1500);
-    setTimeout(fixLinkRenderMode, 5000);
+    setInterval(fixLinkRenderMode, 2000);  // 持续监控: 导入新工作流/新画布也会被修复
 
     let runs = [];
     let view = "grid", kind = "all", selDate = null, calYear = 0, calMonth = 0;
