@@ -1,0 +1,10 @@
+{
+  "output_dir": "",
+  "archive_dir": "",
+  "backup_dir": "",
+  "auto_archive": true,
+  "thumb_width": 480,
+  "interval_sec": 10,
+  "ffprobe": "",
+  "ffmpeg": ""
+}
