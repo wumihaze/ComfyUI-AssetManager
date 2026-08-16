@@ -31,8 +31,6 @@
 |---|---|---|
 | ![预览](assets/screenshots/03-preview.png) | ![设置](assets/screenshots/04-settings.png) | ![目录](assets/screenshots/05-browse-dir.png) |
 
-> 缩略图已做模糊处理（隐藏实际生成内容）。
-
 ## 📦 安装
 
 ### 方法一：ComfyUI-Manager（推荐）
