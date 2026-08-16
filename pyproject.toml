@@ -1,15 +1,17 @@
 [project]
 name = "comfyui-asset-manager"
-version = "1.0.0"
 description = "ComfyUI 资产管理插件：自动归档生成产物，提供日历/网格浏览、搜索、批量删除、一键备份，支持输出目录切换与目录点选"
+version = "1.0.0"
 readme = "README.md"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 authors = [{ name = "Wumihaze", email = "317549200+wumihaze@users.noreply.github.com" }]
 keywords = ["comfyui", "asset-manager", "gallery", "archive", "backup"]
 requires-python = ">=3.9"
+dependencies = ["Pillow>=9.0"]
 
 [project.urls]
-Homepage = "https://github.com/Wumihaze/ComfyUI-AssetManager"
+Repository = "https://github.com/Wumihaze/ComfyUI-AssetManager"
 
 [tool.comfy]
-web = "web"
+PublisherId = "Wumihaze"
+DisplayName = "ComfyUI-AssetManager"
