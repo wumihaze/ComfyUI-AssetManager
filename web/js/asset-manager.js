@@ -99,7 +99,7 @@ app.registerExtension({
       } catch (e) {}
     }
     setTimeout(fixLinkRenderMode, 1500);
-    setInterval(fixLinkRenderMode, 2000);  // 持续监控: 导入新工作流/新画布也会被修复
+    setTimeout(fixLinkRenderMode, 6000);
 
     let runs = [];
     let view = "grid", kind = "all", selDate = null, calYear = 0, calMonth = 0;
@@ -360,40 +360,17 @@ app.registerExtension({
         $el("label", { textContent: "提示词", style: { fontSize: "12px" } }),
         ta,
         $el("div.btns", {}, [
-          $el("button.asm-btn.primary", { textContent: "⚡ 导入到 ComfyUI", onclick: (e) => importToComfyUI(r, e.target) }),
           $el("button.asm-btn", { textContent: "复制提示词", onclick: () => { ta.select(); navigator.clipboard?.writeText(ta.value).then(() => statusMsg("已复制")); } }),
-          $el("button.asm-btn", { textContent: "下载 workflow.json", onclick: () => downloadWorkflow(r) }),
+          $el("button.asm-btn.primary", { textContent: "下载 workflow.json", onclick: () => downloadWorkflow(r) }),
           $el("button.asm-btn.danger", { textContent: "🗑 从硬盘删除", onclick: () => doDelete(r, m) }),
         ]),
-        $el("div", { textContent: "💡 点「导入到 ComfyUI」一键把整套工作流(含连线)载入画布; 也可下载 workflow.json 拖入。", style: { fontSize: "11px", color: "var(--descrip-text,#aaa)", marginTop: "8px" } }),
+        $el("div", { textContent: "💡 下载 workflow.json 后拖进 ComfyUI 画布, 即可完整还原整套工作流(节点+连线)。", style: { fontSize: "11px", color: "var(--descrip-text,#aaa)", marginTop: "8px" } }),
       ]);
       m.appendChild($el("div.bk", { onclick: () => m.remove() }));
       m.appendChild(pn);
       document.body.appendChild(m);
     }
 
-    function flashBtn(btn, msg) {
-      const old = btn.textContent;
-      btn.textContent = msg;
-      setTimeout(() => { btn.textContent = old; }, 1800);
-    }
-    async function importToComfyUI(r, btn) {
-      if (!r.has_workflow) { flashBtn(btn, "该产物无工作流"); return; }
-      try {
-        const res = await fetch("/asset/file?p=" + encodeURIComponent(r.dir + "/workflow.json"));
-        const text = await res.text();
-        const target = app.canvasContainer || document.querySelector(".graph-canvas-container") || document.body;
-        const file = new File([text], r.name.replace(/[\\/:*?"<>|]/g, "_") + ".workflow.json", { type: "application/json" });
-        const dt = new DataTransfer();
-        dt.items.add(file);
-        target.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
-        target.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
-        flashBtn(btn, "✅ 已导入, 正在载入画布…");
-        setTimeout(() => closePanel(), 1500);
-      } catch (e) {
-        flashBtn(btn, "导入失败: " + e);
-      }
-    }
     function downloadWorkflow(r) {
       if (!r.has_workflow) { statusMsg("该产物未携带 workflow 元数据"); return; }
       fetch("/asset/file?p=" + encodeURIComponent(r.dir + "/workflow.json"))
