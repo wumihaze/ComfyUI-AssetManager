@@ -31,7 +31,7 @@
 
 ```bash
 cd ComfyUI/custom_nodes
-git clone https://github.com/lmtree/ComfyUI-AssetManager.git
+git clone https://github.com/Wumihaze/ComfyUI-AssetManager.git
 ```
 
 ### 方法三：手动下载
