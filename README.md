@@ -90,4 +90,4 @@ git clone https://github.com/Wumihaze/ComfyUI-AssetManager.git
 
 ## 📄 License
 
-[MIT](LICENSE) © 2026 lmtree
+[MIT](LICENSE) © 2026 Wumihaze

@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "ComfyUI 资产管理插件：自动归档生成产物，提供日历/网格浏览、搜索、批量删除、一键备份，支持输出目录切换与目录点选"
 readme = "README.md"
 license = { text = "MIT" }
-authors = [{ name = "lmtree", email = "317549200+wumihaze@users.noreply.github.com" }]
+authors = [{ name = "Wumihaze", email = "317549200+wumihaze@users.noreply.github.com" }]
 keywords = ["comfyui", "asset-manager", "gallery", "archive", "backup"]
 requires-python = ">=3.9"
 
