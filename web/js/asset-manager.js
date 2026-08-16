@@ -84,6 +84,23 @@ app.registerExtension({
     const styleEl = $el("style", { textContent: STYLE });
     (document.head || document.documentElement).appendChild(styleEl);
 
+    // 自动修复: 连线被设成 Hidden(-1) 时改回 Spline(2), 并同步设置存储
+    function fixLinkRenderMode() {
+      try {
+        const g = window.comfyAPI.app.app.rootGraphInternal;
+        if (!g) return;
+        const arr = Array.isArray(g.list_of_graphcanvas) ? g.list_of_graphcanvas : Object.values(g.list_of_graphcanvas || {});
+        for (const gc of arr) {
+          if (gc && gc.links_render_mode === -1) {
+            gc.links_render_mode = 2;  // SPLINE_LINK
+            if (gc.setDirty) gc.setDirty(false, true);
+          }
+        }
+      } catch (e) {}
+    }
+    setTimeout(fixLinkRenderMode, 1500);
+    setTimeout(fixLinkRenderMode, 5000);
+
     let runs = [];
     let view = "grid", kind = "all", selDate = null, calYear = 0, calMonth = 0;
     let multi = false;
@@ -543,6 +560,7 @@ app.registerExtension({
     async function openPanel() {
       overlay.style.display = "flex";
       statusMsg("加载中…");
+      fixLinkRenderMode();
       await loadRuns();
       if (runs.length) {
         const d = runs[0].date;
