@@ -21,6 +21,18 @@
 - 输出目录切换且重启自动恢复
 - 目录浏览器点选，不依赖手输绝对路径
 
+## 📸 界面预览
+
+| 网格视图 | 日历视图 |
+|---|---|
+| ![网格视图](assets/screenshots/01-grid.png) | ![日历视图](assets/screenshots/02-calendar.png) |
+
+| 预览详情 | 资产设置 | 目录点选 |
+|---|---|---|
+| ![预览](assets/screenshots/03-preview.png) | ![设置](assets/screenshots/04-settings.png) | ![目录](assets/screenshots/05-browse-dir.png) |
+
+> 缩略图已做模糊处理（隐藏实际生成内容）。
+
 ## 📦 安装
 
 ### 方法一：ComfyUI-Manager（推荐）
