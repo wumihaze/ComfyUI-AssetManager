@@ -1,5 +1,6 @@
-import { app } from "../../../scripts/app.js";
-import { $el } from "../../../scripts/ui.js";
+const app = window.comfyAPI.app.app;
+const $el = window.comfyAPI.ui.$el;
+const ComfyButton = window.comfyAPI.button.ComfyButton;
 
 const STYLE = `
 .asm-overlay { position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; }
@@ -580,7 +581,7 @@ app.registerExtension({
     // ---------- 入口 ----------
     // 菜单栏按钮(图标用 archive 以区分「显示图像流」)
     try {
-      const btn = new (await import("../../../scripts/ui/components/button.js")).ComfyButton({
+      const btn = new ComfyButton({
         icon: "archive",
         content: "资产管理",
         tooltip: "浏览/搜索/删除产物, 切换输出目录, 备份",
