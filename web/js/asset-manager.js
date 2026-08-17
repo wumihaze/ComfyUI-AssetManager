@@ -132,6 +132,7 @@ app.registerExtension({
       "归档库目录": "Archive directory",
       "备份目录": "Backup directory",
       "自动归档新产物": "Auto-archive new assets",
+      "归档安装前已有的产物": "Archive assets already present on install",
       "缩略图宽度(px)": "Thumbnail width (px)",
       "扫描间隔(秒)": "Scan interval (sec)",
       "浏览…": "Browse…",
@@ -510,6 +511,8 @@ app.registerExtension({
       const fBak = $el("input", { value: c.backup_dir || "" });
       const fAuto = $el("input", { type: "checkbox" });
       fAuto.checked = c.auto_archive !== false;
+      const fExisting = $el("input", { type: "checkbox" });
+      fExisting.checked = c.archive_existing === true;
       const fThumb = $el("input", { type: "number", min: 100, max: 2000, value: String(c.thumb_width || 480) });
       const fInterval = $el("input", { type: "number", min: 3, max: 3600, value: String(c.interval_sec || 10) });
 
@@ -526,6 +529,7 @@ app.registerExtension({
           row(t("归档库目录"), fArch, true),
           row(t("备份目录"), fBak, true),
           $el("div.chk", {}, [fAuto, $el("span", { textContent: t("自动归档新产物") })]),
+          $el("div.chk", {}, [fExisting, $el("span", { textContent: t("归档安装前已有的产物") })]),
           row(t("缩略图宽度(px)"), fThumb),
           row(t("扫描间隔(秒)"), fInterval),
         ]),
@@ -544,6 +548,7 @@ app.registerExtension({
           archive_dir: fArch.value.trim(),
           backup_dir: fBak.value.trim(),
           auto_archive: fAuto.checked,
+          archive_existing: fExisting.checked,
           thumb_width: Number(fThumb.value),
           interval_sec: Number(fInterval.value),
         };

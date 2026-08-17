@@ -159,6 +159,8 @@ async def asset_set_config(request):
 
     if "auto_archive" in updates:
         updates["auto_archive"] = bool(updates["auto_archive"])
+    if "archive_existing" in updates:
+        updates["archive_existing"] = bool(updates["archive_existing"])
 
     global _arch, _state
     with _LOCK:

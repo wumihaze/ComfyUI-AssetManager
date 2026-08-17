@@ -31,6 +31,7 @@ DEFAULT_CONFIG = {
     "archive_dir": "",  # 空 = 使用 <ComfyUI>/asset_archive
     "backup_dir": "",   # 空 = 使用 <ComfyUI>/asset_backups
     "auto_archive": True,
+    "archive_existing": False,  # 首次运行是否归档 output 里已有的历史产物(False=只归档安装后的新产物)
     "thumb_width": 480,
     "interval_sec": 10,
     "ffprobe": "",      # 空 = 自动探测(优先 PATH 里的 ffprobe)
@@ -339,6 +340,9 @@ def scan_all(output_dir, archive_dir, state, cfg):
     if not out.is_dir():
         return 0
     new_runs = []
+    state_changed = False
+    archive_existing = bool(cfg.get("archive_existing", False))
+    baseline_done = bool(state.get("__baseline_done__", False))
     for root, dirs, files in os.walk(out):
         dirs[:] = [d for d in dirs if not d.startswith(".")]
         for fn in files:
@@ -352,7 +356,8 @@ def scan_all(output_dir, archive_dir, state, cfg):
                 st = os.stat(src)
             except OSError:
                 continue
-            if state.get(rel) == {"size": st.st_size, "mtime_ns": st.st_mtime_ns}:
+            cur_key = {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
+            if state.get(rel) == cur_key:
                 continue
             # 等待写入完成
             last = None
@@ -370,10 +375,24 @@ def scan_all(output_dir, archive_dir, state, cfg):
                 time.sleep(0.5)
             if not stable:
                 continue
-            r = archive_file(rel, src, archive_dir, state, cfg)
-            if r:
-                new_runs.append(r)
-    if new_runs:
+            if rel in state:
+                # 已记录过(归档过或基线过), 文件有变化 → 归档新版本
+                r = archive_file(rel, src, archive_dir, state, cfg)
+                if r:
+                    new_runs.append(r)
+            elif baseline_done or archive_existing:
+                # 基线已建立后的新文件, 或用户开启"归档历史" → 归档
+                r = archive_file(rel, src, archive_dir, state, cfg)
+                if r:
+                    new_runs.append(r)
+            else:
+                # 首次扫描且不归档历史: 只记录基线(不复制文件)
+                state[rel] = cur_key
+                state_changed = True
+    if not baseline_done:
+        state["__baseline_done__"] = True
+        state_changed = True
+    if new_runs or state_changed:
         save_state(archive_dir, state)
     return len(new_runs)
 

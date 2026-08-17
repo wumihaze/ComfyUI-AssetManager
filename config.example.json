@@ -3,6 +3,7 @@
   "archive_dir": "",
   "backup_dir": "",
   "auto_archive": true,
+  "archive_existing": false,
   "thumb_width": 480,
   "interval_sec": 10,
   "ffprobe": "",

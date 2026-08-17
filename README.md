@@ -88,6 +88,7 @@ A `config.json` is generated on your first settings save (template at [`config.e
 | `archive_dir` | Asset archive directory (empty = `<ComfyUI>/asset_archive`) / 资产归档库目录（空 = `<ComfyUI>/asset_archive`） |
 | `backup_dir` | Backup zip directory (empty = `<ComfyUI>/asset_backups`) / 备份 zip 存放目录（空 = `<ComfyUI>/asset_backups`） |
 | `auto_archive` | Auto-archive new assets (true/false) / 是否自动归档新产物（true/false） |
+| `archive_existing` | On first run, also archive assets already in the output directory (false = only new assets after install) / 首次运行时是否也归档 output 里已有的历史产物（false = 只归档安装后的新产物） |
 | `thumb_width` | Thumbnail width (px) / 缩略图宽度(px) |
 | `interval_sec` | Archive scan interval (seconds) / 归档扫描间隔(秒) |
 | `ffprobe` / `ffmpeg` | ffmpeg tool paths (empty = auto-detect from PATH) / ffmpeg 工具路径（空 = 自动从 PATH 探测） |
