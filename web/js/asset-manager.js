@@ -208,7 +208,6 @@ app.registerExtension({
     let multi = false;
     const selected = new Set();
     let pollTimer = null;
-    let langTimer = null;
     let curConfig = {};
 
     const byDate = {};
@@ -705,6 +704,7 @@ app.registerExtension({
     }
     async function openPanel() {
       detectLang();
+      relabel();
       overlay.style.display = "flex";
       statusMsg(t("加载中…"));
       fixLinkRenderMode();
@@ -717,18 +717,18 @@ app.registerExtension({
       statusMsg(t("共 ") + runs.length + t(" 条资产"));
       if (pollTimer) clearInterval(pollTimer);
       pollTimer = setInterval(pollRefresh, 8000);
-      if (langTimer) clearInterval(langTimer);
-      langTimer = setInterval(checkLang, 1000);
     }
     function closePanel() {
       overlay.style.display = "none";
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-      if (langTimer) { clearInterval(langTimer); langTimer = null; }
     }
     function checkLang() {
       const prev = LANG;
       detectLang();
-      if (LANG !== prev) { relabel(); refresh(); }
+      if (LANG !== prev) {
+        relabel();
+        if (overlay.style.display === "flex") refresh();
+      }
     }
     async function pollRefresh() {
       checkLang();
@@ -772,5 +772,8 @@ app.registerExtension({
     } catch (e) {
       console.error("AssetManager 菜单按钮注册失败:", e);
     }
+
+    // 全局语言轮询: 始终跟随 ComfyUI 语言(含菜单按钮), 无需面板打开
+    setInterval(checkLang, 1000);
   },
 });
