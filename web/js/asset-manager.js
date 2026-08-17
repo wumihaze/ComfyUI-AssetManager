@@ -172,6 +172,16 @@ app.registerExtension({
     };
     function terr(en) { return LANG === "zh" ? (ERR_L10N[en] || en) : en; }
     detectLang();
+    // 语言变化时动态更新所有静态文本
+    const relabelers = [];
+    function bindText(el, zh, prop) {
+      prop = prop || "textContent";
+      const set = () => { el[prop] = t(zh); };
+      relabelers.push(set);
+      set();
+      return el;
+    }
+    function relabel() { for (const f of relabelers) f(); }
 
     const styleEl = $el("style", { textContent: STYLE });
     (document.head || document.documentElement).appendChild(styleEl);
@@ -198,6 +208,7 @@ app.registerExtension({
     let multi = false;
     const selected = new Set();
     let pollTimer = null;
+    let langTimer = null;
     let curConfig = {};
 
     const byDate = {};
@@ -222,7 +233,8 @@ app.registerExtension({
     const overlay = $el("div.asm-overlay");
     const body = $el("div.asm-body");
     const status = $el("div.asm-status", { textContent: "" });
-    const q = $el("input.asm-search", { type: "text", placeholder: t("搜索提示词 / 模型 / 文件名 / 日期…") });
+    const q = $el("input.asm-search", { type: "text" });
+    bindText(q, "搜索提示词 / 模型 / 文件名 / 日期…", "placeholder");
     const countEl = $el("span", { textContent: "", style: { fontSize: "12px", color: "var(--descrip-text,#aaa)" } });
     const calGrid = $el("div.asm-calgrid");
     const calListTitle = $el("h3");
@@ -231,17 +243,28 @@ app.registerExtension({
 
     const gridEl = $el("div.asm-grid");
     const calWrap = $el("div.asm-cal", { style: { display: "none" } });
-    const weekdays = LANG === "zh" ? ["一", "二", "三", "四", "五", "六", "日"] : ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+    const weekdayEls = [];
+    function renderWeekdays() {
+      const wd = LANG === "zh" ? ["一", "二", "三", "四", "五", "六", "日"] : ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+      weekdayEls.forEach((el, i) => { el.textContent = wd[i]; });
+    }
+    relabelers.push(renderWeekdays);
+    const prevMonthBtn = $el("button.asm-calnav", { onclick: () => { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } selDate = null; renderCal(); } });
+    bindText(prevMonthBtn, "‹ 上月");
+    const nextMonthBtn = $el("button.asm-calnav", { onclick: () => { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } selDate = null; renderCal(); } });
+    bindText(nextMonthBtn, "下月 ›");
+    const latestBtn = $el("button.asm-calnav.latest", { onclick: () => { goLatest(); } });
+    bindText(latestBtn, "回到最新");
     calWrap.appendChild($el("div", {}, [
-      $el("div.asm-calbar", {}, [
-        $el("button.asm-calnav", { textContent: t("‹ 上月"), onclick: () => { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } selDate = null; renderCal(); } }),
-        calTitle,
-        $el("button.asm-calnav", { textContent: t("下月 ›"), onclick: () => { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } selDate = null; renderCal(); } }),
-        $el("button.asm-calnav.latest", { textContent: t("回到最新"), onclick: () => { goLatest(); } }),
-      ]),
-      $el("div.asm-week", {}, weekdays.map((t2, idx) => $el("span" + (idx >= 5 ? ".we" : ""), { textContent: t2 }))),
+      $el("div.asm-calbar", {}, [prevMonthBtn, calTitle, nextMonthBtn, latestBtn]),
+      $el("div.asm-week", {}, Array.from({ length: 7 }, (_, idx) => {
+        const s = $el("span" + (idx >= 5 ? ".we" : ""));
+        weekdayEls.push(s);
+        return s;
+      })),
       calGrid,
     ]));
+    renderWeekdays();
     calWrap.appendChild($el("div.asm-callist", {}, [calListTitle, calListCards]));
 
     function goLatest() {
@@ -254,41 +277,53 @@ app.registerExtension({
 
     // ---------- 视图切换 ----------
     const viewBtns = {};
-    function mkViewBtn(label, v) {
-      const b = $el("button.asm-btn" + (view === v ? ".on" : ""), { textContent: label });
+    function mkViewBtn(zh, v) {
+      const b = $el("button.asm-btn" + (view === v ? ".on" : ""));
+      bindText(b, zh);
       b.onclick = () => { view = v; Object.values(viewBtns).forEach(x => x.classList.remove("on")); b.classList.add("on"); refresh(); };
       viewBtns[v] = b;
       return b;
     }
     const kindBtns = {};
-    function mkKindBtn(label, k) {
-      const b = $el("button.asm-btn" + (kind === k ? ".on" : ""), { textContent: label });
+    function mkKindBtn(zh, k) {
+      const b = $el("button.asm-btn" + (kind === k ? ".on" : ""));
+      bindText(b, zh);
       b.onclick = () => { kind = k; Object.values(kindBtns).forEach(x => x.classList.remove("on")); b.classList.add("on"); refresh(); };
       kindBtns[k] = b;
       return b;
     }
 
-    const multiBtn = $el("button.asm-btn", { textContent: t("☑ 多选"), onclick: toggleMulti });
-    const batchBtn = $el("button.asm-btn.danger", { textContent: t("🗑 删除选中"), onclick: batchDelete, style: { display: "none" } });
+    const multiBtn = $el("button.asm-btn", { onclick: toggleMulti });
+    bindText(multiBtn, "☑ 多选");
+    const batchBtn = $el("button.asm-btn.danger", { onclick: batchDelete, style: { display: "none" } });
+    bindText(batchBtn, "🗑 删除选中");
 
+    const settingsBtn = $el("button.asm-btn", { onclick: openSettings });
+    bindText(settingsBtn, "⚙ 资产设置");
+    const backupBtn = $el("button.asm-btn", { onclick: confirmBackup });
+    bindText(backupBtn, "💾 备份");
+    const scanBtn = $el("button.asm-btn", { onclick: doScan });
+    bindText(scanBtn, "⟳ 扫描");
     const toolbar = $el("div.asm-toolbar", {}, [
       q,
-      mkViewBtn(t("网格"), "grid"),
-      mkViewBtn(t("日历"), "cal"),
-      mkKindBtn(t("全部"), "all"),
-      mkKindBtn(t("图片"), "image"),
-      mkKindBtn(t("视频"), "video"),
+      mkViewBtn("网格", "grid"),
+      mkViewBtn("日历", "cal"),
+      mkKindBtn("全部", "all"),
+      mkKindBtn("图片", "image"),
+      mkKindBtn("视频", "video"),
       multiBtn,
       batchBtn,
-      $el("button.asm-btn", { textContent: t("⚙ 资产设置"), onclick: openSettings }),
-      $el("button.asm-btn", { textContent: t("💾 备份"), onclick: confirmBackup }),
-      $el("button.asm-btn", { textContent: t("⟳ 扫描"), onclick: doScan }),
+      settingsBtn,
+      backupBtn,
+      scanBtn,
       countEl,
     ]);
 
+    const panelTitle = $el("h2");
+    bindText(panelTitle, "🗂 资产管理");
     const panel = $el("div.asm-panel", {}, [
       $el("div.asm-header", {}, [
-        $el("h2", { textContent: t("🗂 资产管理") }),
+        panelTitle,
         $el("span.sp"),
         $el("button.asm-x", { textContent: "✕", onclick: closePanel }),
       ]),
@@ -682,12 +717,21 @@ app.registerExtension({
       statusMsg(t("共 ") + runs.length + t(" 条资产"));
       if (pollTimer) clearInterval(pollTimer);
       pollTimer = setInterval(pollRefresh, 8000);
+      if (langTimer) clearInterval(langTimer);
+      langTimer = setInterval(checkLang, 1000);
     }
     function closePanel() {
       overlay.style.display = "none";
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      if (langTimer) { clearInterval(langTimer); langTimer = null; }
+    }
+    function checkLang() {
+      const prev = LANG;
+      detectLang();
+      if (LANG !== prev) { relabel(); refresh(); }
     }
     async function pollRefresh() {
+      checkLang();
       try {
         const res = await fetch("/asset/list");
         const d = await res.json();
@@ -718,6 +762,13 @@ app.registerExtension({
         action: () => openPanel(),
       });
       if (app.menu && app.menu.settingsGroup) app.menu.settingsGroup.append(btn);
+      relabelers.push(() => {
+        try {
+          const span = btn.element && btn.element.querySelector("span");
+          if (span) span.textContent = t("资产管理");
+          if (btn.element) btn.element.title = t("浏览/搜索/删除产物, 切换输出目录, 备份");
+        } catch (e) {}
+      });
     } catch (e) {
       console.error("AssetManager 菜单按钮注册失败:", e);
     }
