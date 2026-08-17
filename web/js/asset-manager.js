@@ -195,7 +195,6 @@ app.registerExtension({
       for (const r of runs) (byDate[r.date] || (byDate[r.date] = [])).push(r);
     }
 
-    function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
     function pad(n) { return String(n).padStart(2, "0"); }
     function mediaUrl(dir, f) { return "/asset/file?p=" + encodeURIComponent(dir + "/" + f); }
 
@@ -612,7 +611,7 @@ app.registerExtension({
     // ---------- 备份 / 扫描 ----------
     async function confirmBackup() {
       try { curConfig = await (await fetch("/asset/config")).json(); } catch (e) {}
-      const bakDir = (curConfig.config && curConfig.config.backup_dir) || "D:\\AI\\ComfyUI_Backups";
+      const bakDir = (curConfig.config && curConfig.config.backup_dir) || curConfig.default_backup_dir || "";
       const m = $el("div.asm-modal");
       m.style.display = "flex";
       const pn = $el("div.pn", {}, [
