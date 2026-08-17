@@ -117,7 +117,7 @@ app.registerExtension({
       "时间: ": "Time: ",
       "模型/LoRA: ": "Models/LoRA: ",
       "参数: ": "Params: ",
-      "提示词": "Prompt",
+      "提示词": "Prompt text",
       "复制提示词": "Copy prompt",
       "下载 workflow.json": "Download workflow.json",
       "🗑 从硬盘删除": "🗑 Delete from disk",
@@ -144,7 +144,7 @@ app.registerExtension({
       "（无子目录）": "(no subdirectories)",
       "⬆ 上一级": "⬆ Up",
       "✅ 选择此目录": "✅ Select this folder",
-      "取消": "Cancel",
+      "取消": "Dismiss",
       "💾 备份确认": "💾 Backup confirmation",
       "将备份以下内容:": "Will back up:",
       "• 资产库（图片/视频/元数据/工作流）<br>• 工作流文件 (user/default/workflows)<br>• 插件配置": "• Asset library (images / videos / metadata / workflows)<br>• Workflow files (user/default/workflows)<br>• Plugin config",
@@ -176,12 +176,25 @@ app.registerExtension({
     const relabelers = [];
     function bindText(el, zh, prop) {
       prop = prop || "textContent";
-      const set = () => { el[prop] = t(zh); };
-      relabelers.push(set);
-      set();
+      el.dataset.i18n = zh;
+      el.dataset.i18nProp = prop;
+      el[prop] = t(zh);
       return el;
     }
-    function relabel() { for (const f of relabelers) f(); }
+    function relabel() {
+      document.querySelectorAll("[data-i18n]").forEach((el) => {
+        el[el.dataset.i18nProp || "textContent"] = t(el.dataset.i18n);
+      });
+      for (const f of relabelers) f();
+    }
+    function labeledRow(parts) {
+      const d = $el("div");
+      for (const p of parts) {
+        if (p.zh) { const s = $el("span"); bindText(s, p.zh); d.appendChild(s); }
+        if (p.text) d.appendChild(document.createTextNode(p.text));
+      }
+      return d;
+    }
 
     const styleEl = $el("style", { textContent: STYLE });
     (document.head || document.documentElement).appendChild(styleEl);
@@ -491,18 +504,18 @@ app.registerExtension({
         $el("button.x", { textContent: "✕", onclick: () => m.remove() }),
         media,
         $el("div.rows", {}, [
-          $el("div", { textContent: t("来源: ") + r.name }),
-          $el("div", { textContent: t("时间: ") + r.time + " | " + t("模型/LoRA: ") + models }),
-          $el("div", { textContent: t("参数: ") + params }),
+          labeledRow([{ zh: "来源: ", text: r.name }]),
+          labeledRow([{ zh: "时间: ", text: r.time + " | " }, { zh: "模型/LoRA: ", text: models }]),
+          labeledRow([{ zh: "参数: ", text: params }]),
         ]),
-        $el("label", { textContent: t("提示词"), style: { fontSize: "12px" } }),
+        bindText($el("label", { style: { fontSize: "12px" } }), "提示词"),
         ta,
         $el("div.btns", {}, [
-          $el("button.asm-btn", { textContent: t("复制提示词"), onclick: () => { ta.select(); navigator.clipboard?.writeText(ta.value).then(() => statusMsg(t("已复制"))); } }),
-          $el("button.asm-btn.primary", { textContent: t("下载 workflow.json"), onclick: () => downloadWorkflow(r) }),
-          $el("button.asm-btn.danger", { textContent: t("🗑 从硬盘删除"), onclick: () => doDelete(r, m) }),
+          bindText($el("button.asm-btn", { onclick: () => { ta.select(); navigator.clipboard?.writeText(ta.value).then(() => statusMsg(t("已复制"))); } }), "复制提示词"),
+          bindText($el("button.asm-btn.primary", { onclick: () => downloadWorkflow(r) }), "下载 workflow.json"),
+          bindText($el("button.asm-btn.danger", { onclick: () => doDelete(r, m) }), "🗑 从硬盘删除"),
         ]),
-        $el("div", { textContent: t("💡 下载 workflow.json 后拖进 ComfyUI 画布, 即可完整还原整套工作流(节点+连线)。"), style: { fontSize: "11px", color: "var(--descrip-text,#aaa)", marginTop: "8px" } }),
+        bindText($el("div", { style: { fontSize: "11px", color: "var(--descrip-text,#aaa)", marginTop: "8px" } }), "💡 下载 workflow.json 后拖进 ComfyUI 画布, 即可完整还原整套工作流(节点+连线)。"),
       ]);
       m.appendChild($el("div.bk", { onclick: () => m.remove() }));
       m.appendChild(pn);
@@ -540,7 +553,8 @@ app.registerExtension({
       const c = curConfig.config || {};
       const m = $el("div.asm-modal");
       m.style.display = "flex";
-      const fOut = $el("input", { value: curConfig.current_output_dir || "", placeholder: t("留空=使用 ComfyUI 默认 output") });
+      const fOut = $el("input", { value: curConfig.current_output_dir || "" });
+      bindText(fOut, "留空=使用 ComfyUI 默认 output", "placeholder");
       const fArch = $el("input", { value: curConfig.archive_dir || c.archive_dir || "" });
       const fBak = $el("input", { value: c.backup_dir || "" });
       const fAuto = $el("input", { type: "checkbox" });
@@ -550,27 +564,27 @@ app.registerExtension({
       const fThumb = $el("input", { type: "number", min: 100, max: 2000, value: String(c.thumb_width || 480) });
       const fInterval = $el("input", { type: "number", min: 3, max: 3600, value: String(c.interval_sec || 10) });
 
-      const row = (label, input, browse) => $el("div.row", {}, [
-        $el("label", { textContent: label }), input,
-        browse ? $el("button.asm-btn", { textContent: t("浏览…"), onclick: () => browseDir(input) }) : null,
+      const row = (zh, input, browse) => $el("div.row", {}, [
+        bindText($el("label"), zh), input,
+        browse ? bindText($el("button.asm-btn", { onclick: () => browseDir(input) }), "浏览…") : null,
       ].filter(Boolean));
 
       const pn = $el("div.pn", {}, [
         $el("button.x", { textContent: "✕", onclick: () => m.remove() }),
-        $el("h2", { textContent: t("⚙ 资产设置"), style: { margin: "0 0 10px", fontSize: "15px" } }),
+        bindText($el("h2", { style: { margin: "0 0 10px", fontSize: "15px" } }), "⚙ 资产设置"),
         $el("div.asm-set", {}, [
-          row(t("输出目录"), fOut, true),
-          row(t("归档库目录"), fArch, true),
-          row(t("备份目录"), fBak, true),
-          $el("div.chk", {}, [fAuto, $el("span", { textContent: t("自动归档新产物") })]),
-          $el("div.chk", {}, [fExisting, $el("span", { textContent: t("归档安装前已有的产物") })]),
-          row(t("缩略图宽度(px)"), fThumb),
-          row(t("扫描间隔(秒)"), fInterval),
+          row("输出目录", fOut, true),
+          row("归档库目录", fArch, true),
+          row("备份目录", fBak, true),
+          $el("div.chk", {}, [fAuto, bindText($el("span"), "自动归档新产物")]),
+          $el("div.chk", {}, [fExisting, bindText($el("span"), "归档安装前已有的产物")]),
+          row("缩略图宽度(px)", fThumb),
+          row("扫描间隔(秒)", fInterval),
         ]),
         $el("div.btns", {}, [
-          $el("button.asm-btn.primary", { textContent: t("保存设置"), onclick: saveSettings }),
+          bindText($el("button.asm-btn.primary", { onclick: saveSettings }), "保存设置"),
         ]),
-        $el("div", { textContent: t("改归档/备份目录后新产物进入新目录, 旧数据保留; 输出目录切换重启 ComfyUI 后仍生效; 自动归档开关和扫描间隔即时生效。"), style: { fontSize: "11px", color: "var(--descrip-text,#aaa)", marginTop: "10px" } }),
+        bindText($el("div", { style: { fontSize: "11px", color: "var(--descrip-text,#aaa)", marginTop: "10px" } }), "改归档/备份目录后新产物进入新目录, 旧数据保留; 输出目录切换重启 ComfyUI 后仍生效; 自动归档开关和扫描间隔即时生效。"),
       ]);
       m.appendChild($el("div.bk", { onclick: () => m.remove() }));
       m.appendChild(pn);
@@ -634,21 +648,21 @@ app.registerExtension({
 
       const pn = $el("div.pn", {}, [
         $el("button.x", { textContent: "✕", onclick: () => m.remove() }),
-        $el("h2", { textContent: t("📁 选择目录"), style: { margin: "0 0 10px", fontSize: "15px" } }),
+        bindText($el("h2", { style: { margin: "0 0 10px", fontSize: "15px" } }), "📁 选择目录"),
         pathEl,
         $el("div.btns", { style: { margin: "8px 0" } }, [
-          $el("button.asm-btn", { textContent: t("⬆ 上一级"), onclick: async () => {
+          bindText($el("button.asm-btn", { onclick: async () => {
             try {
               const res = await fetch("/asset/browse_dir?path=" + encodeURIComponent(curPath));
               const d = await res.json();
               if (d.ok) load(d.parent || "");
             } catch (e) {}
-          } }),
+          } }), "⬆ 上一级"),
         ]),
         listEl,
         $el("div.btns", { style: { marginTop: "12px" } }, [
-          $el("button.asm-btn.primary", { textContent: t("✅ 选择此目录"), onclick: () => { inputEl.value = curPath; m.remove(); } }),
-          $el("button.asm-btn", { textContent: t("取消"), onclick: () => m.remove() }),
+          bindText($el("button.asm-btn.primary", { onclick: () => { inputEl.value = curPath; m.remove(); } }), "✅ 选择此目录"),
+          bindText($el("button.asm-btn", { onclick: () => m.remove() }), "取消"),
         ]),
       ]);
       m.appendChild($el("div.bk", { onclick: () => m.remove() }));
@@ -663,15 +677,20 @@ app.registerExtension({
       const bakDir = (curConfig.config && curConfig.config.backup_dir) || curConfig.default_backup_dir || "";
       const m = $el("div.asm-modal");
       m.style.display = "flex";
+      const bakRow = $el("div", { style: { fontSize: "13px", marginBottom: "14px", wordBreak: "break-all" } });
+      const bakPrefix = $el("span");
+      bindText(bakPrefix, "备份目录: ");
+      bakRow.appendChild(bakPrefix);
+      bakRow.appendChild(document.createTextNode(bakDir));
       const pn = $el("div.pn", {}, [
         $el("button.x", { textContent: "✕", onclick: () => m.remove() }),
-        $el("h2", { textContent: t("💾 备份确认"), style: { margin: "0 0 12px", fontSize: "15px" } }),
-        $el("div", { textContent: t("将备份以下内容:"), style: { fontSize: "13px", marginBottom: "6px" } }),
-        $el("div", { innerHTML: t("• 资产库（图片/视频/元数据/工作流）<br>• 工作流文件 (user/default/workflows)<br>• 插件配置"), style: { fontSize: "13px", color: "var(--descrip-text,#aaa)", marginBottom: "12px", lineHeight: "1.8" } }),
-        $el("div", { textContent: t("备份目录: ") + bakDir, style: { fontSize: "13px", marginBottom: "14px", wordBreak: "break-all" } }),
+        bindText($el("h2", { style: { margin: "0 0 12px", fontSize: "15px" } }), "💾 备份确认"),
+        bindText($el("div", { style: { fontSize: "13px", marginBottom: "6px" } }), "将备份以下内容:"),
+        bindText($el("div", { style: { fontSize: "13px", color: "var(--descrip-text,#aaa)", marginBottom: "12px", lineHeight: "1.8" } }), "• 资产库（图片/视频/元数据/工作流）<br>• 工作流文件 (user/default/workflows)<br>• 插件配置", "innerHTML"),
+        bakRow,
         $el("div.btns", {}, [
-          $el("button.asm-btn.primary", { textContent: t("确定备份"), onclick: () => { m.remove(); doBackup(); } }),
-          $el("button.asm-btn", { textContent: t("取消"), onclick: () => m.remove() }),
+          bindText($el("button.asm-btn.primary", { onclick: () => { m.remove(); doBackup(); } }), "确定备份"),
+          bindText($el("button.asm-btn", { onclick: () => m.remove() }), "取消"),
         ]),
       ]);
       m.appendChild($el("div.bk", { onclick: () => m.remove() }));
