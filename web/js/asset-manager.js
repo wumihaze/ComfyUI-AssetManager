@@ -81,6 +81,87 @@ const STYLE = `
 app.registerExtension({
   name: "ComfyUI.AssetManager",
   async setup() {
+    // ---------- 国际化: 跟随 ComfyUI 语言 ----------
+    let LANG = "zh";
+    function detectLang() {
+      try {
+        const loc = window.comfyAPI.app.app.ui.settings.getSettingValue("Comfy.Locale");
+        LANG = (loc && String(loc).toLowerCase().startsWith("zh")) ? "zh" : "en";
+      } catch (e) { LANG = "zh"; }
+    }
+    const L10N = {
+      "资产管理": "Asset Manager",
+      "浏览/搜索/删除产物, 切换输出目录, 备份": "Browse / search / delete assets, switch output directory, backup",
+      "搜索提示词 / 模型 / 文件名 / 日期…": "Search prompts / models / filename / date…",
+      "🗂 资产管理": "🗂 Asset Manager",
+      "‹ 上月": "‹ Prev",
+      "下月 ›": "Next ›",
+      "回到最新": "Latest",
+      "网格": "Grid",
+      "日历": "Calendar",
+      "全部": "All types",
+      "图片": "Images",
+      "视频": "Videos",
+      "☑ 多选": "☑ Multi-select",
+      "🗑 删除选中": "🗑 Delete selected",
+      "⚙ 资产设置": "⚙ Settings",
+      "💾 备份": "💾 Backup",
+      "⟳ 扫描": "⟳ Scan",
+      "图": "Img",
+      "(未检测到提示词)": "(no prompt detected)",
+      "没有匹配的产物": "No matching assets",
+      "当天没有归档产物": "No assets on this day",
+      "当天没有匹配当前筛选的产物": "No matching assets on this day",
+      "点选日期查看当天产物": "Click a date to view its assets",
+      "来源: ": "Source: ",
+      "时间: ": "Time: ",
+      "模型/LoRA: ": "Models/LoRA: ",
+      "参数: ": "Params: ",
+      "提示词": "Prompt",
+      "复制提示词": "Copy prompt",
+      "下载 workflow.json": "Download workflow.json",
+      "🗑 从硬盘删除": "🗑 Delete from disk",
+      "💡 下载 workflow.json 后拖进 ComfyUI 画布, 即可完整还原整套工作流(节点+连线)。": "💡 Drag the downloaded workflow.json onto the ComfyUI canvas to fully restore the workflow (nodes + links).",
+      "已复制": "Copied",
+      "该产物未携带 workflow 元数据": "This asset has no workflow metadata",
+      "下载失败": "Download failed",
+      "已从硬盘删除": "Deleted from disk",
+      "未知错误": "unknown error",
+      "留空=使用 ComfyUI 默认 output": "Leave empty = ComfyUI default output",
+      "输出目录": "Output directory",
+      "归档库目录": "Archive directory",
+      "备份目录": "Backup directory",
+      "自动归档新产物": "Auto-archive new assets",
+      "缩略图宽度(px)": "Thumbnail width (px)",
+      "扫描间隔(秒)": "Scan interval (sec)",
+      "浏览…": "Browse…",
+      "保存设置": "Save settings",
+      "改归档/备份目录后新产物进入新目录, 旧数据保留; 输出目录切换重启 ComfyUI 后仍生效; 自动归档开关和扫描间隔即时生效。": "After changing the archive/backup directory, new assets go to the new directory (old data stays). Output directory changes persist across ComfyUI restarts. Auto-archive and scan interval take effect immediately.",
+      "✅ 设置已保存": "✅ Settings saved",
+      "📁 选择目录": "📁 Select directory",
+      "（请选择磁盘）": "(select a drive)",
+      "（无子目录）": "(no subdirectories)",
+      "⬆ 上一级": "⬆ Up",
+      "✅ 选择此目录": "✅ Select this folder",
+      "取消": "Cancel",
+      "💾 备份确认": "💾 Backup confirmation",
+      "将备份以下内容:": "Will back up:",
+      "• 资产库（图片/视频/元数据/工作流）<br>• 工作流文件 (user/default/workflows)<br>• 插件配置": "• Asset library (images / videos / metadata / workflows)<br>• Workflow files (user/default/workflows)<br>• Plugin config",
+      "备份目录: ": "Backup directory: ",
+      "确定备份": "Back up",
+      "备份中…": "Backing up…",
+      "✅ 备份完成: ": "✅ Backup done: ",
+      " 个文件) → ": " files) → ",
+      "扫描中…": "Scanning…",
+      "扫描失败": "Scan failed",
+      "加载中…": "Loading…",
+      "共 ": "Total: ",
+      " 条资产": " assets",
+      "已自动更新: 共 ": "Auto-updated: ",
+    };
+    function t(zh) { return LANG === "zh" ? zh : (L10N[zh] !== undefined ? L10N[zh] : zh); }
+    detectLang();
+
     const styleEl = $el("style", { textContent: STYLE });
     (document.head || document.documentElement).appendChild(styleEl);
 
@@ -131,7 +212,7 @@ app.registerExtension({
     const overlay = $el("div.asm-overlay");
     const body = $el("div.asm-body");
     const status = $el("div.asm-status", { textContent: "" });
-    const q = $el("input.asm-search", { type: "text", placeholder: "搜索提示词 / 模型 / 文件名 / 日期…" });
+    const q = $el("input.asm-search", { type: "text", placeholder: t("搜索提示词 / 模型 / 文件名 / 日期…") });
     const countEl = $el("span", { textContent: "", style: { fontSize: "12px", color: "var(--descrip-text,#aaa)" } });
     const calGrid = $el("div.asm-calgrid");
     const calListTitle = $el("h3");
@@ -140,14 +221,15 @@ app.registerExtension({
 
     const gridEl = $el("div.asm-grid");
     const calWrap = $el("div.asm-cal", { style: { display: "none" } });
+    const weekdays = LANG === "zh" ? ["一", "二", "三", "四", "五", "六", "日"] : ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
     calWrap.appendChild($el("div", {}, [
       $el("div.asm-calbar", {}, [
-        $el("button.asm-calnav", { textContent: "‹ 上月", onclick: () => { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } selDate = null; renderCal(); } }),
+        $el("button.asm-calnav", { textContent: t("‹ 上月"), onclick: () => { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } selDate = null; renderCal(); } }),
         calTitle,
-        $el("button.asm-calnav", { textContent: "下月 ›", onclick: () => { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } selDate = null; renderCal(); } }),
-        $el("button.asm-calnav.latest", { textContent: "回到最新", onclick: () => { goLatest(); } }),
+        $el("button.asm-calnav", { textContent: t("下月 ›"), onclick: () => { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } selDate = null; renderCal(); } }),
+        $el("button.asm-calnav.latest", { textContent: t("回到最新"), onclick: () => { goLatest(); } }),
       ]),
-      $el("div.asm-week", {}, ["一", "二", "三", "四", "五", "六", "日"].map((t, idx) => $el("span" + (idx >= 5 ? ".we" : ""), { textContent: t }))),
+      $el("div.asm-week", {}, weekdays.map((t2, idx) => $el("span" + (idx >= 5 ? ".we" : ""), { textContent: t2 }))),
       calGrid,
     ]));
     calWrap.appendChild($el("div.asm-callist", {}, [calListTitle, calListCards]));
@@ -176,27 +258,27 @@ app.registerExtension({
       return b;
     }
 
-    const multiBtn = $el("button.asm-btn", { textContent: "☑ 多选", onclick: toggleMulti });
-    const batchBtn = $el("button.asm-btn.danger", { textContent: "🗑 删除选中", onclick: batchDelete, style: { display: "none" } });
+    const multiBtn = $el("button.asm-btn", { textContent: t("☑ 多选"), onclick: toggleMulti });
+    const batchBtn = $el("button.asm-btn.danger", { textContent: t("🗑 删除选中"), onclick: batchDelete, style: { display: "none" } });
 
     const toolbar = $el("div.asm-toolbar", {}, [
       q,
-      mkViewBtn("网格", "grid"),
-      mkViewBtn("日历", "cal"),
-      mkKindBtn("全部", "all"),
-      mkKindBtn("图片", "image"),
-      mkKindBtn("视频", "video"),
+      mkViewBtn(t("网格"), "grid"),
+      mkViewBtn(t("日历"), "cal"),
+      mkKindBtn(t("全部"), "all"),
+      mkKindBtn(t("图片"), "image"),
+      mkKindBtn(t("视频"), "video"),
       multiBtn,
       batchBtn,
-      $el("button.asm-btn", { textContent: "⚙ 资产设置", onclick: openSettings }),
-      $el("button.asm-btn", { textContent: "💾 备份", onclick: confirmBackup }),
-      $el("button.asm-btn", { textContent: "⟳ 扫描", onclick: doScan }),
+      $el("button.asm-btn", { textContent: t("⚙ 资产设置"), onclick: openSettings }),
+      $el("button.asm-btn", { textContent: t("💾 备份"), onclick: confirmBackup }),
+      $el("button.asm-btn", { textContent: t("⟳ 扫描"), onclick: doScan }),
       countEl,
     ]);
 
     const panel = $el("div.asm-panel", {}, [
       $el("div.asm-header", {}, [
-        $el("h2", { textContent: "🗂 资产管理" }),
+        $el("h2", { textContent: t("🗂 资产管理") }),
         $el("span.sp"),
         $el("button.asm-x", { textContent: "✕", onclick: closePanel }),
       ]),
@@ -218,12 +300,12 @@ app.registerExtension({
       card.appendChild($el("div.m", {}, [
         $el("img", { src: thumb, loading: "lazy" }),
         isVid ? $el("div.play", { textContent: "▶" }) : null,
-        $el("span.badge", { textContent: isVid ? "视频" : "图" }),
+        $el("span.badge", { textContent: isVid ? t("视频") : t("图") }),
         selected.has(r.dir) ? $el("div.selmark", { textContent: "✓" }) : null,
       ].filter(Boolean)));
       card.appendChild($el("div.meta", {}, [
         $el("div.nm", { textContent: r.name }),
-        $el("div.pr", { textContent: (r.positive || "").slice(0, 160) || "(未检测到提示词)" }),
+        $el("div.pr", { textContent: (r.positive || "").slice(0, 160) || t("(未检测到提示词)") }),
         r.models && r.models.length ? $el("div.mo", { textContent: r.models.join(" · ") }) : null,
       ].filter(Boolean)));
       card.onclick = () => {
@@ -246,7 +328,7 @@ app.registerExtension({
       const list = filtered(runs);
       gridEl.innerHTML = "";
       countEl.textContent = list.length + " / " + runs.length;
-      if (!list.length) { gridEl.appendChild($el("div.asm-empty", { textContent: "没有匹配的产物" })); return; }
+      if (!list.length) { gridEl.appendChild($el("div.asm-empty", { textContent: t("没有匹配的产物") })); return; }
       for (const r of list) renderCard(r, gridEl);
     }
 
@@ -256,7 +338,7 @@ app.registerExtension({
     }
 
     function renderCal() {
-      calTitle.textContent = calYear + "年" + (calMonth + 1) + "月";
+      calTitle.textContent = LANG === "zh" ? (calYear + "年" + (calMonth + 1) + "月") : (calYear + "-" + pad(calMonth + 1));
       const first = (new Date(calYear, calMonth, 1).getDay() + 6) % 7;
       const days = new Date(calYear, calMonth + 1, 0).getDate();
       const now = new Date();
@@ -274,12 +356,12 @@ app.registerExtension({
         if (has) {
           const cnt = $el("div.cnt");
           if (kind === "all") {
-            if (c.img) cnt.appendChild($el("span.tag.tag-img", { textContent: c.img + " 图" }));
-            if (c.vid) cnt.appendChild($el("span.tag.tag-vid", { textContent: c.vid + " 视" }));
+            if (c.img) cnt.appendChild($el("span.tag.tag-img", { textContent: c.img + (LANG === "zh" ? " 图" : " img") }));
+            if (c.vid) cnt.appendChild($el("span.tag.tag-vid", { textContent: c.vid + (LANG === "zh" ? " 视" : " vid") }));
           } else {
             const n = kind === "image" ? c.img : c.vid;
             const cls = kind === "image" ? "tag-img" : "tag-vid";
-            const label = kind === "image" ? " 图" : " 视";
+            const label = LANG === "zh" ? (kind === "image" ? " 图" : " 视") : (kind === "image" ? " img" : " vid");
             cnt.appendChild($el("span.tag." + cls, { textContent: n + label }));
           }
           day.appendChild(cnt);
@@ -289,12 +371,19 @@ app.registerExtension({
       }
       const base = (selDate && byDate[selDate]) ? byDate[selDate].length : 0;
       const list = selDate ? filtered(byDate[selDate] || []) : [];
-      let title = selDate ? (selDate + " · 当天归档 " + base + " 条") : "点选日期查看当天产物";
-      if (selDate && (kind !== "all" || q.value.trim())) title += " <span class='sub'>（当前筛选 " + list.length + " 条）</span>";
+      let title;
+      if (selDate) {
+        title = LANG === "zh" ? (selDate + " · 当天归档 " + base + " 条") : (selDate + " · " + base + " assets");
+      } else {
+        title = t("点选日期查看当天产物");
+      }
+      if (selDate && (kind !== "all" || q.value.trim())) {
+        title += LANG === "zh" ? " <span class='sub'>（当前筛选 " + list.length + " 条）</span>" : " <span class='sub'>(filtered: " + list.length + ")</span>";
+      }
       calListTitle.innerHTML = title;
       calListCards.innerHTML = "";
-      if (selDate && base === 0) calListCards.appendChild($el("div.asm-empty", { textContent: "当天没有归档产物" }));
-      else if (!list.length && selDate) calListCards.appendChild($el("div.asm-empty", { textContent: "当天没有匹配当前筛选的产物" }));
+      if (selDate && base === 0) calListCards.appendChild($el("div.asm-empty", { textContent: t("当天没有归档产物") }));
+      else if (!list.length && selDate) calListCards.appendChild($el("div.asm-empty", { textContent: t("当天没有匹配当前筛选的产物") }));
       else for (const r of list) renderCard(r, calListCards);
     }
 
@@ -308,7 +397,7 @@ app.registerExtension({
     function updateBatchBtn() {
       if (multi && selected.size > 0) {
         batchBtn.style.display = "";
-        batchBtn.textContent = "🗑 删除选中(" + selected.size + ")";
+        batchBtn.textContent = t("🗑 删除选中") + "(" + selected.size + ")";
       } else {
         batchBtn.style.display = "none";
       }
@@ -323,7 +412,10 @@ app.registerExtension({
     async function batchDelete() {
       if (!selected.size) return;
       const ids = [...selected];
-      if (!confirm("确定要从硬盘永久删除选中的 " + ids.length + " 项产物吗?\n\n将同时删除归档副本和 output 中的原始文件, 无法恢复。")) return;
+      const msg = LANG === "zh"
+        ? ("确定要从硬盘永久删除选中的 " + ids.length + " 项产物吗?\n\n将同时删除归档副本和 output 中的原始文件, 无法恢复。")
+        : ("Permanently delete the selected " + ids.length + " items from disk?\n\nThis also deletes the archive copies and the original files in output. This cannot be undone.");
+      if (!confirm(msg)) return;
       const res = await fetch("/asset/delete_batch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ run_ids: ids }) });
       const d = await res.json();
       if (d.ok) {
@@ -332,9 +424,11 @@ app.registerExtension({
         selected.clear();
         rebuildByDate();
         refresh();
-        statusMsg("已删除 " + d.deleted + " 项" + (d.failed && d.failed.length ? "（失败 " + d.failed.length + " 项）" : ""));
+        const done = LANG === "zh" ? ("已删除 " + d.deleted + " 项") : ("Deleted " + d.deleted + " items");
+        const extra = d.failed && d.failed.length ? (LANG === "zh" ? ("（失败 " + d.failed.length + " 项）") : (" (failed: " + d.failed.length + ")")) : "";
+        statusMsg(done + extra);
       } else {
-        statusMsg("批量删除失败: " + (d.error || ""));
+        statusMsg(t("批量删除失败: ") + (d.error || ""));
       }
     }
 
@@ -353,18 +447,18 @@ app.registerExtension({
         $el("button.x", { textContent: "✕", onclick: () => m.remove() }),
         media,
         $el("div.rows", {}, [
-          $el("div", { textContent: "来源: " + r.name }),
-          $el("div", { textContent: "时间: " + r.time + " | 模型/LoRA: " + models }),
-          $el("div", { textContent: "参数: " + params }),
+          $el("div", { textContent: t("来源: ") + r.name }),
+          $el("div", { textContent: t("时间: ") + r.time + " | " + t("模型/LoRA: ") + models }),
+          $el("div", { textContent: t("参数: ") + params }),
         ]),
-        $el("label", { textContent: "提示词", style: { fontSize: "12px" } }),
+        $el("label", { textContent: t("提示词"), style: { fontSize: "12px" } }),
         ta,
         $el("div.btns", {}, [
-          $el("button.asm-btn", { textContent: "复制提示词", onclick: () => { ta.select(); navigator.clipboard?.writeText(ta.value).then(() => statusMsg("已复制")); } }),
-          $el("button.asm-btn.primary", { textContent: "下载 workflow.json", onclick: () => downloadWorkflow(r) }),
-          $el("button.asm-btn.danger", { textContent: "🗑 从硬盘删除", onclick: () => doDelete(r, m) }),
+          $el("button.asm-btn", { textContent: t("复制提示词"), onclick: () => { ta.select(); navigator.clipboard?.writeText(ta.value).then(() => statusMsg(t("已复制"))); } }),
+          $el("button.asm-btn.primary", { textContent: t("下载 workflow.json"), onclick: () => downloadWorkflow(r) }),
+          $el("button.asm-btn.danger", { textContent: t("🗑 从硬盘删除"), onclick: () => doDelete(r, m) }),
         ]),
-        $el("div", { textContent: "💡 下载 workflow.json 后拖进 ComfyUI 画布, 即可完整还原整套工作流(节点+连线)。", style: { fontSize: "11px", color: "var(--descrip-text,#aaa)", marginTop: "8px" } }),
+        $el("div", { textContent: t("💡 下载 workflow.json 后拖进 ComfyUI 画布, 即可完整还原整套工作流(节点+连线)。"), style: { fontSize: "11px", color: "var(--descrip-text,#aaa)", marginTop: "8px" } }),
       ]);
       m.appendChild($el("div.bk", { onclick: () => m.remove() }));
       m.appendChild(pn);
@@ -372,25 +466,28 @@ app.registerExtension({
     }
 
     function downloadWorkflow(r) {
-      if (!r.has_workflow) { statusMsg("该产物未携带 workflow 元数据"); return; }
+      if (!r.has_workflow) { statusMsg(t("该产物未携带 workflow 元数据")); return; }
       fetch("/asset/file?p=" + encodeURIComponent(r.dir + "/workflow.json"))
         .then(x => x.blob()).then(b => {
           const a = document.createElement("a");
           a.href = URL.createObjectURL(b);
           a.download = r.name.replace(/[\\/:*?"<>|]/g, "_") + ".workflow.json";
           a.click();
-        }).catch(() => statusMsg("下载失败"));
+        }).catch(() => statusMsg(t("下载失败")));
     }
 
     async function doDelete(r, modal) {
-      if (!confirm("确定要从硬盘永久删除该产物吗?\n\n" + r.name + "\n\n将同时删除归档副本和 output 中的原始文件, 无法恢复。")) return;
+      const msg = LANG === "zh"
+        ? ("确定要从硬盘永久删除该产物吗?\n\n" + r.name + "\n\n将同时删除归档副本和 output 中的原始文件, 无法恢复。")
+        : ("Permanently delete this asset from disk?\n\n" + r.name + "\n\nThis also deletes the archive copy and the original file in output. This cannot be undone.");
+      if (!confirm(msg)) return;
       const res = await fetch("/asset/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ run_id: r.dir }) });
       const d = await res.json();
       if (d.ok) {
         modal.remove();
         runs = runs.filter(x => x.dir !== r.dir);
-        rebuildByDate(); refresh(); statusMsg("已从硬盘删除");
-      } else statusMsg("删除失败: " + (d.error || "未知错误"));
+        rebuildByDate(); refresh(); statusMsg(t("已从硬盘删除"));
+      } else statusMsg(t("删除失败: ") + (d.error || t("未知错误")));
     }
 
     // ---------- 设置 ----------
@@ -399,7 +496,7 @@ app.registerExtension({
       const c = curConfig.config || {};
       const m = $el("div.asm-modal");
       m.style.display = "flex";
-      const fOut = $el("input", { value: curConfig.current_output_dir || "", placeholder: "留空=使用 ComfyUI 默认 output" });
+      const fOut = $el("input", { value: curConfig.current_output_dir || "", placeholder: t("留空=使用 ComfyUI 默认 output") });
       const fArch = $el("input", { value: curConfig.archive_dir || c.archive_dir || "" });
       const fBak = $el("input", { value: c.backup_dir || "" });
       const fAuto = $el("input", { type: "checkbox" });
@@ -409,24 +506,24 @@ app.registerExtension({
 
       const row = (label, input, browse) => $el("div.row", {}, [
         $el("label", { textContent: label }), input,
-        browse ? $el("button.asm-btn", { textContent: "浏览…", onclick: () => browseDir(input) }) : null,
+        browse ? $el("button.asm-btn", { textContent: t("浏览…"), onclick: () => browseDir(input) }) : null,
       ].filter(Boolean));
 
       const pn = $el("div.pn", {}, [
         $el("button.x", { textContent: "✕", onclick: () => m.remove() }),
-        $el("h2", { textContent: "⚙ 资产设置", style: { margin: "0 0 10px", fontSize: "15px" } }),
+        $el("h2", { textContent: t("⚙ 资产设置"), style: { margin: "0 0 10px", fontSize: "15px" } }),
         $el("div.asm-set", {}, [
-          row("输出目录", fOut, true),
-          row("归档库目录", fArch, true),
-          row("备份目录", fBak, true),
-          $el("div.chk", {}, [fAuto, $el("span", { textContent: "自动归档新产物" })]),
-          row("缩略图宽度(px)", fThumb),
-          row("扫描间隔(秒)", fInterval),
+          row(t("输出目录"), fOut, true),
+          row(t("归档库目录"), fArch, true),
+          row(t("备份目录"), fBak, true),
+          $el("div.chk", {}, [fAuto, $el("span", { textContent: t("自动归档新产物") })]),
+          row(t("缩略图宽度(px)"), fThumb),
+          row(t("扫描间隔(秒)"), fInterval),
         ]),
         $el("div.btns", {}, [
-          $el("button.asm-btn.primary", { textContent: "保存设置", onclick: saveSettings }),
+          $el("button.asm-btn.primary", { textContent: t("保存设置"), onclick: saveSettings }),
         ]),
-        $el("div", { textContent: "改归档/备份目录后新产物进入新目录, 旧数据保留; 输出目录切换重启 ComfyUI 后仍生效; 自动归档开关和扫描间隔即时生效。", style: { fontSize: "11px", color: "var(--descrip-text,#aaa)", marginTop: "10px" } }),
+        $el("div", { textContent: t("改归档/备份目录后新产物进入新目录, 旧数据保留; 输出目录切换重启 ComfyUI 后仍生效; 自动归档开关和扫描间隔即时生效。"), style: { fontSize: "11px", color: "var(--descrip-text,#aaa)", marginTop: "10px" } }),
       ]);
       m.appendChild($el("div.bk", { onclick: () => m.remove() }));
       m.appendChild(pn);
@@ -446,11 +543,11 @@ app.registerExtension({
         if (d.ok) {
           curConfig = { config: d.config, archive_dir: d.archive_dir, current_output_dir: d.current_output_dir };
           m.remove();
-          const extra = (d.errors && d.errors.length) ? "（部分项未生效: " + d.errors.join("; ") + "）" : "";
-          statusMsg("✅ 设置已保存" + extra);
+          const extra = (d.errors && d.errors.length) ? (LANG === "zh" ? ("（部分项未生效: " + d.errors.join("; ") + "）") : (" (some failed: " + d.errors.join("; ") + ")")) : "";
+          statusMsg(t("✅ 设置已保存") + extra);
           await loadRuns(); refresh();
         } else {
-          statusMsg("保存失败: " + (d.error || ""));
+          statusMsg(t("保存失败: ") + (d.error || ""));
         }
       }
     }
@@ -467,12 +564,12 @@ app.registerExtension({
         try {
           const res = await fetch("/asset/browse_dir?path=" + encodeURIComponent(path));
           const d = await res.json();
-          if (!d.ok) { pathEl.textContent = "错误: " + (d.error || ""); listEl.innerHTML = ""; return; }
+          if (!d.ok) { pathEl.textContent = t("错误: ") + (d.error || ""); listEl.innerHTML = ""; return; }
           curPath = d.path || "";
-          pathEl.textContent = "当前: " + (curPath || "（请选择磁盘）");
+          pathEl.textContent = t("当前: ") + (curPath || t("（请选择磁盘）"));
           listEl.innerHTML = "";
           if (!d.dirs.length) {
-            listEl.appendChild($el("div", { textContent: "（无子目录）", style: { padding: "12px", color: "var(--descrip-text,#aaa)", fontSize: "12px" } }));
+            listEl.appendChild($el("div", { textContent: t("（无子目录）"), style: { padding: "12px", color: "var(--descrip-text,#aaa)", fontSize: "12px" } }));
           }
           for (const dir of d.dirs) {
             const full = curPath ? curPath.replace(/[\\/]$/, "") + "\\" + dir : dir;
@@ -483,16 +580,16 @@ app.registerExtension({
             listEl.appendChild(item);
           }
         } catch (e) {
-          pathEl.textContent = "加载失败: " + e;
+          pathEl.textContent = t("加载失败: ") + e;
         }
       }
 
       const pn = $el("div.pn", {}, [
         $el("button.x", { textContent: "✕", onclick: () => m.remove() }),
-        $el("h2", { textContent: "📁 选择目录", style: { margin: "0 0 10px", fontSize: "15px" } }),
+        $el("h2", { textContent: t("📁 选择目录"), style: { margin: "0 0 10px", fontSize: "15px" } }),
         pathEl,
         $el("div.btns", { style: { margin: "8px 0" } }, [
-          $el("button.asm-btn", { textContent: "⬆ 上一级", onclick: async () => {
+          $el("button.asm-btn", { textContent: t("⬆ 上一级"), onclick: async () => {
             try {
               const res = await fetch("/asset/browse_dir?path=" + encodeURIComponent(curPath));
               const d = await res.json();
@@ -502,8 +599,8 @@ app.registerExtension({
         ]),
         listEl,
         $el("div.btns", { style: { marginTop: "12px" } }, [
-          $el("button.asm-btn.primary", { textContent: "✅ 选择此目录", onclick: () => { inputEl.value = curPath; m.remove(); } }),
-          $el("button.asm-btn", { textContent: "取消", onclick: () => m.remove() }),
+          $el("button.asm-btn.primary", { textContent: t("✅ 选择此目录"), onclick: () => { inputEl.value = curPath; m.remove(); } }),
+          $el("button.asm-btn", { textContent: t("取消"), onclick: () => m.remove() }),
         ]),
       ]);
       m.appendChild($el("div.bk", { onclick: () => m.remove() }));
@@ -520,13 +617,13 @@ app.registerExtension({
       m.style.display = "flex";
       const pn = $el("div.pn", {}, [
         $el("button.x", { textContent: "✕", onclick: () => m.remove() }),
-        $el("h2", { textContent: "💾 备份确认", style: { margin: "0 0 12px", fontSize: "15px" } }),
-        $el("div", { textContent: "将备份以下内容:", style: { fontSize: "13px", marginBottom: "6px" } }),
-        $el("div", { innerHTML: "• 资产库（图片/视频/元数据/工作流）<br>• 工作流文件 (user/default/workflows)<br>• 插件配置", style: { fontSize: "13px", color: "var(--descrip-text,#aaa)", marginBottom: "12px", lineHeight: "1.8" } }),
-        $el("div", { textContent: "备份目录: " + bakDir, style: { fontSize: "13px", marginBottom: "14px", wordBreak: "break-all" } }),
+        $el("h2", { textContent: t("💾 备份确认"), style: { margin: "0 0 12px", fontSize: "15px" } }),
+        $el("div", { textContent: t("将备份以下内容:"), style: { fontSize: "13px", marginBottom: "6px" } }),
+        $el("div", { innerHTML: t("• 资产库（图片/视频/元数据/工作流）<br>• 工作流文件 (user/default/workflows)<br>• 插件配置"), style: { fontSize: "13px", color: "var(--descrip-text,#aaa)", marginBottom: "12px", lineHeight: "1.8" } }),
+        $el("div", { textContent: t("备份目录: ") + bakDir, style: { fontSize: "13px", marginBottom: "14px", wordBreak: "break-all" } }),
         $el("div.btns", {}, [
-          $el("button.asm-btn.primary", { textContent: "确定备份", onclick: () => { m.remove(); doBackup(); } }),
-          $el("button.asm-btn", { textContent: "取消", onclick: () => m.remove() }),
+          $el("button.asm-btn.primary", { textContent: t("确定备份"), onclick: () => { m.remove(); doBackup(); } }),
+          $el("button.asm-btn", { textContent: t("取消"), onclick: () => m.remove() }),
         ]),
       ]);
       m.appendChild($el("div.bk", { onclick: () => m.remove() }));
@@ -534,21 +631,21 @@ app.registerExtension({
       document.body.appendChild(m);
     }
     async function doBackup() {
-      statusMsg("备份中…");
+      statusMsg(t("备份中…"));
       const res = await fetch("/asset/backup", { method: "POST" });
       const d = await res.json();
-      if (d.ok) statusMsg("✅ 备份完成: " + d.name + " (" + (d.size / 1048576).toFixed(1) + " MB, " + d.files + " 个文件) → " + d.file);
-      else statusMsg("备份失败: " + (d.error || ""));
+      if (d.ok) statusMsg(t("✅ 备份完成: ") + d.name + " (" + (d.size / 1048576).toFixed(1) + " MB, " + d.files + t(" 个文件) → ") + d.file);
+      else statusMsg(t("备份失败: ") + (d.error || ""));
     }
     async function doScan() {
-      statusMsg("扫描中…");
+      statusMsg(t("扫描中…"));
       const res = await fetch("/asset/scan", { method: "POST" });
       const d = await res.json();
-      statusMsg(d.ok ? ("扫描完成, 新增 " + d.new + " 条") : ("扫描失败"));
+      statusMsg(d.ok ? (LANG === "zh" ? ("扫描完成, 新增 " + d.new + " 条") : ("Scan done, " + d.new + " new")) : t("扫描失败"));
       await loadRuns(); refresh();
     }
 
-    function statusMsg(t) { status.textContent = t; }
+    function statusMsg(s) { status.textContent = s; }
 
     // ---------- 打开/关闭 ----------
     async function loadRuns() {
@@ -558,8 +655,9 @@ app.registerExtension({
       try { curConfig = await (await fetch("/asset/config")).json(); } catch (e) {}
     }
     async function openPanel() {
+      detectLang();
       overlay.style.display = "flex";
-      statusMsg("加载中…");
+      statusMsg(t("加载中…"));
       fixLinkRenderMode();
       await loadRuns();
       if (runs.length) {
@@ -567,7 +665,7 @@ app.registerExtension({
         calYear = Number(d.slice(0, 4)); calMonth = Number(d.slice(5, 7)) - 1; selDate = d;
       }
       refresh();
-      statusMsg("共 " + runs.length + " 条资产");
+      statusMsg(t("共 ") + runs.length + t(" 条资产"));
       if (pollTimer) clearInterval(pollTimer);
       pollTimer = setInterval(pollRefresh, 8000);
     }
@@ -589,7 +687,7 @@ app.registerExtension({
           // 清除已不存在的选中项
           for (const s of [...selected]) if (!newDirs.has(s)) selected.delete(s);
           refresh();
-          statusMsg("已自动更新: 共 " + runs.length + " 条资产");
+          statusMsg(t("已自动更新: 共 ") + runs.length + t(" 条资产"));
         }
       } catch (e) {}
     }
@@ -601,8 +699,8 @@ app.registerExtension({
     try {
       const btn = new ComfyButton({
         icon: "archive",
-        content: "资产管理",
-        tooltip: "浏览/搜索/删除产物, 切换输出目录, 备份",
+        content: t("资产管理"),
+        tooltip: t("浏览/搜索/删除产物, 切换输出目录, 备份"),
         action: () => openPanel(),
       });
       if (app.menu && app.menu.settingsGroup) app.menu.settingsGroup.append(btn);
