@@ -160,6 +160,16 @@ app.registerExtension({
       "已自动更新: 共 ": "Auto-updated: ",
     };
     function t(zh) { return LANG === "zh" ? zh : (L10N[zh] !== undefined ? L10N[zh] : zh); }
+    const ERR_L10N = {
+      "Missing output directory path": "缺少输出目录路径",
+      "run_ids must be an array": "run_ids 必须是数组",
+      "Directory not found": "目录不存在",
+      "Directory is outside the allowed browse scope": "该目录不在允许浏览范围内",
+      "Missing run_id": "缺少 run_id",
+      "Invalid archive path": "非法的归档路径",
+      "Archive entry not found": "未找到该归档条目",
+    };
+    function terr(en) { return LANG === "zh" ? (ERR_L10N[en] || en) : en; }
     detectLang();
 
     const styleEl = $el("style", { textContent: STYLE });
@@ -427,7 +437,7 @@ app.registerExtension({
         const extra = d.failed && d.failed.length ? (LANG === "zh" ? ("（失败 " + d.failed.length + " 项）") : (" (failed: " + d.failed.length + ")")) : "";
         statusMsg(done + extra);
       } else {
-        statusMsg(t("批量删除失败: ") + (d.error || ""));
+        statusMsg(t("批量删除失败: ") + (terr(d.error) || ""));
       }
     }
 
@@ -486,7 +496,7 @@ app.registerExtension({
         modal.remove();
         runs = runs.filter(x => x.dir !== r.dir);
         rebuildByDate(); refresh(); statusMsg(t("已从硬盘删除"));
-      } else statusMsg(t("删除失败: ") + (d.error || t("未知错误")));
+      } else statusMsg(t("删除失败: ") + (terr(d.error) || t("未知错误")));
     }
 
     // ---------- 设置 ----------
@@ -546,7 +556,7 @@ app.registerExtension({
           statusMsg(t("✅ 设置已保存") + extra);
           await loadRuns(); refresh();
         } else {
-          statusMsg(t("保存失败: ") + (d.error || ""));
+          statusMsg(t("保存失败: ") + (terr(d.error) || ""));
         }
       }
     }
@@ -563,7 +573,7 @@ app.registerExtension({
         try {
           const res = await fetch("/asset/browse_dir?path=" + encodeURIComponent(path));
           const d = await res.json();
-          if (!d.ok) { pathEl.textContent = t("错误: ") + (d.error || ""); listEl.innerHTML = ""; return; }
+          if (!d.ok) { pathEl.textContent = t("错误: ") + (terr(d.error) || ""); listEl.innerHTML = ""; return; }
           curPath = d.path || "";
           pathEl.textContent = t("当前: ") + (curPath || t("（请选择磁盘）"));
           listEl.innerHTML = "";
@@ -634,7 +644,7 @@ app.registerExtension({
       const res = await fetch("/asset/backup", { method: "POST" });
       const d = await res.json();
       if (d.ok) statusMsg(t("✅ 备份完成: ") + d.name + " (" + (d.size / 1048576).toFixed(1) + " MB, " + d.files + t(" 个文件) → ") + d.file);
-      else statusMsg(t("备份失败: ") + (d.error || ""));
+      else statusMsg(t("备份失败: ") + (terr(d.error) || ""));
     }
     async function doScan() {
       statusMsg(t("扫描中…"));

@@ -1,3 +1,4 @@
-# ComfyUI 已自带 Pillow, 一般无需单独安装; 若你的环境缺失则执行:
-# pip install Pillow>=9.0
+# ComfyUI bundles Pillow, so it's usually already installed.
+# If missing, run: pip install Pillow>=9.0
+# ComfyUI 已自带 Pillow，一般无需单独安装；若缺失执行：pip install Pillow>=9.0
 Pillow>=9.0

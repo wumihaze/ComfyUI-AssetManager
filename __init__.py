@@ -103,7 +103,7 @@ async def asset_set_output_dir(request):
     path = (body or {}).get("path", "")
     path = (path or "").strip()
     if not path:
-        return web.json_response({"ok": False, "error": "缺少输出目录路径"})
+        return web.json_response({"ok": False, "error": "Missing output directory path"})
     path = os.path.abspath(path)
     try:
         os.makedirs(path, exist_ok=True)
@@ -141,7 +141,7 @@ async def asset_set_config(request):
                     os.makedirs(val, exist_ok=True)
                     updates[key] = val
                 except Exception as e:
-                    errors.append(f"{key} 无法创建: {e}")
+                    errors.append(f"Cannot create {key}: {e}")
                     updates.pop(key, None)
             else:
                 updates.pop(key, None)
@@ -154,7 +154,7 @@ async def asset_set_config(request):
                 if updates[key] <= 0:
                     raise ValueError
             except Exception:
-                errors.append(f"{key} 必须是正整数")
+                errors.append(f"{key} must be a positive integer")
                 updates.pop(key, None)
 
     if "auto_archive" in updates:
@@ -201,7 +201,7 @@ async def asset_delete_batch(request):
         body = {}
     run_ids = (body or {}).get("run_ids") or []
     if not isinstance(run_ids, list):
-        return web.json_response({"ok": False, "error": "run_ids 必须是数组"})
+        return web.json_response({"ok": False, "error": "run_ids must be an array"})
 
     def _go():
         deleted, failed = 0, []
@@ -302,9 +302,9 @@ async def asset_browse_dir(request):
             return web.json_response({"ok": True, "path": "", "parent": None, "dirs": drives})
         path = os.path.abspath(path)
         if not os.path.isdir(path):
-            return web.json_response({"ok": False, "error": "目录不存在"})
+            return web.json_response({"ok": False, "error": "Directory not found"})
         if not _is_browsable(path):
-            return web.json_response({"ok": False, "error": "该目录不在允许浏览范围内"})
+            return web.json_response({"ok": False, "error": "Directory is outside the allowed browse scope"})
         parent = os.path.dirname(path)
         if parent == path:
             parent = None

@@ -425,13 +425,13 @@ def delete_run(archive_dir, output_dir, state, run_id):
     arch = Path(archive_dir).resolve()
     out = Path(output_dir).resolve() if output_dir else None
     if not run_id or not isinstance(run_id, str):
-        return {"ok": False, "error": "缺少 run_id"}
+        return {"ok": False, "error": "Missing run_id"}
     run_dir = (arch / run_id).resolve()
     if run_dir == arch or not str(run_dir).startswith(str(arch) + os.sep):
-        return {"ok": False, "error": "非法的归档路径"}
+        return {"ok": False, "error": "Invalid archive path"}
     info_file = run_dir / "info.json"
     if not (run_dir.is_dir() and info_file.is_file()):
-        return {"ok": False, "error": "未找到该归档条目"}
+        return {"ok": False, "error": "Archive entry not found"}
     source_rel = None
     try:
         info = json.loads(info_file.read_text(encoding="utf-8"))
