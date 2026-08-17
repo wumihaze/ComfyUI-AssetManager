@@ -6,8 +6,8 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image/video y
 
 ## ✨ Features · 功能亮点
 
-- **Auto-archive** — a background thread watches the output directory and archives every new asset instantly, extracting **prompt / positive-negative / params (seed, steps, sampler…) / models & LoRA / full workflow** metadata (reads PNG/WebP embedded metadata and MP4/WebM ffmpeg metadata).<br>
-  **自动归档** — 后台线程自动监视输出目录，新产物即时入库，并提取**提示词 / 正负词 / 参数(seed/steps/采样器…) / 模型与 LoRA / 完整工作流**元数据（读 PNG/WebP 内嵌元数据、MP4/WebM 的 ffmpeg 元数据）。
+- **Auto-archive** — a background thread watches the output directory and archives every asset instantly (on first run it also imports the assets already in the output directory), extracting **prompt / positive-negative / params (seed, steps, sampler…) / models & LoRA / full workflow** metadata (reads PNG/WebP embedded metadata and MP4/WebM ffmpeg metadata).<br>
+  **自动归档** — 后台线程自动监视输出目录，新产物即时入库（首次运行也会归档 output 目录里已有的产物），并提取**提示词 / 正负词 / 参数(seed/steps/采样器…) / 模型与 LoRA / 完整工作流**元数据（读 PNG/WebP 内嵌元数据、MP4/WebM 的 ffmpeg 元数据）。
 - **Dual views** — grid view + **calendar view** (grouped by date, with daily image/video count badges; click a day to see that day's assets).<br>
   **双视图浏览** — 网格视图 + **日历视图**（按日期归档，每天显示图/视频数量徽标，点某天看当天产物）。
 - **Search & filter** — full-text search by prompt/model/filename/date; filter by image/video.<br>
@@ -79,8 +79,8 @@ Download the repo zip and extract it into `ComfyUI/custom_nodes/`, keeping the f
 
 ## ⚙️ Configuration · 配置
 
-On first run a `config.json` is generated automatically (template at [`config.example.json`](config.example.json)). Everything can also be changed in the panel's "⚙ Settings".<br>
-首次运行自动生成 `config.json`（模板见 [`config.example.json`](config.example.json)）。所有配置也可在面板「⚙ 资产设置」里直接改：
+A `config.json` is generated on your first settings save (template at [`config.example.json`](config.example.json)). Everything can also be changed in the panel's "⚙ Settings".<br>
+首次保存设置时自动生成 `config.json`（模板见 [`config.example.json`](config.example.json)）。所有配置也可在面板「⚙ 资产设置」里直接改：
 
 | Key · 键 | Description · 说明 |
 |---|---|
