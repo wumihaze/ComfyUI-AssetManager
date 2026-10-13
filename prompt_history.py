@@ -18,6 +18,14 @@ ComfyUI 服务端提示词索引(元数据兜底来源)
 做到**提示词不再依赖文件是否内嵌元数据**。
 
 设计要点:
+  - **为什么不用官方资产系统的挂载点**: ComfyUI 0.38 的 ``AssetManager`` 提供了
+    ``register_executed_output(abs_path, job_id)`` / ``set_event_sink()`` 等扩展点,
+    但它们都不带 prompt 图——实现里只落库 path/size/mtime/mime/tags/尺寸,
+    资产库(AssetContent/Asset/AssetTag/Tag)也没有 prompt 表或字段,
+    ``Asset.job_id`` 只是一个 String(36) 的 UUID; ``extract_file_metadata``
+    也只做 tier1 文件系统属性 + tier2 safetensors 头 + 图片尺寸, 不读 PNG tEXt/EXIF。
+    全-ComfyUI 范围内唯一持有 prompt 图的就是 ``PromptQueue.history``(以 prompt_id 为键),
+    所以兜底只能走它。(2026-10-13 对 0.38.0 源码逐项核实)
   - **延迟导入 server**: assets_core 仍可脱离 ComfyUI 独立测试; ComfyUI 版本变化、
     没有 ``prompt_queue`` / ``get_history`` 时索引自动停用, 不影响插件加载。
   - **只读 + 引用**: ``get_history()`` 在 prompt_id=None 时返回的是引用而非深拷贝,
