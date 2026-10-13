@@ -91,7 +91,10 @@ A `config.json` is generated on your first settings save (template at [`config.e
 | `archive_existing` | On first run, also archive assets already in the output directory (false = only new assets after install) / 首次运行时是否也归档 output 里已有的历史产物（false = 只归档安装后的新产物） |
 | `thumb_width` | Thumbnail width (px) / 缩略图宽度(px) |
 | `interval_sec` | Archive scan interval (seconds) / 归档扫描间隔(秒) |
-| `ffprobe` / `ffmpeg` | ffmpeg tool paths (empty = auto-detect from PATH) / ffmpeg 工具路径（空 = 自动从 PATH 探测）<br>⚠️ **Read-only via the panel** — only a bare command name resolved from `PATH` is accepted; absolute/relative paths are rejected and these keys cannot be changed through the HTTP API (edit `config.json` directly if you really need to). / ⚠️ **面板只读** —— 仅接受从 `PATH` 解析的纯命令名，绝对/相对路径一律拒绝；这两个键**不能**通过 HTTP 接口修改（确实需要请直接改 `config.json`）。 |
+
+> ℹ️ 从 v1.0.4 起，视频元数据与缩略图改用 **PyAV** 在进程内完成，不再需要 ffmpeg/ffprobe，
+> 因此配置里也**不再有** `ffprobe` / `ffmpeg` 两项。若你之前的 `config.json` 里还留着这两项，
+> 可以直接删除（插件会忽略它们）。
 
 ## 📁 Directory structure · 归档目录结构
 
@@ -138,18 +141,19 @@ carry their prompt.
 本插件从 **v1.0.4** 起按 Comfy Registry 的安全标准收紧了输入面（此前版本因
 `policy-v0.5 command-injection` / `policy-v0.2 ARBITRARY_FILE_LAUNCH` 被标记，相关修复见下）：
 
-- **配置写入白名单**：`/asset/set_config` 只接受固定的可配置键，任何未知字段（尤其
-  `ffprobe` / `ffmpeg` 这类可执行文件项）都会被拒绝并回报 `errors`，不会再被写进运行时配置。
-- **可执行文件不接受任意路径**：`ffprobe` / `ffmpeg` 只接受**纯命令名**并通过 `PATH` 解析
-  （`shutil.which`），带任何路径分隔符的值一律拒绝；手工写入 `config.json` 的非法路径也会被归一为默认命令名。
-- **不拼接 shell**：所有外部进程调用都以参数列表 + `shell=False` 执行，参数不可注入。
-- **数值与类型校验**：数值项有上下限，布尔项必须为真正的布尔值。
-- **路径沙箱**：媒体文件读取、工作流下载、目录浏览都限制在 output / archive / backup 目录范围内，
-  删除等写操作校验目标仍在归档目录内（防目录穿越）。
+- **不启动任何外部进程**：视频元数据读取与缩略图生成改用 **PyAV 在进程内**完成，
+  代码中**已无 `subprocess` / `os.system` / `eval` / `exec`**，从根上消除了命令注入面。
+  配置里也移除了 `ffprobe` / `ffmpeg` 两项。
+- **配置写入白名单**：`/asset/set_config` 只接受固定的可配置键，任何未知字段都会被拒绝
+  并在响应 `errors` 中说明，不会再被写进运行时配置。
+- **数值与类型校验**：数值项有上下限；布尔项必须是真正的布尔值。
+- **路径沙箱**：媒体文件读取、工作流下载、目录浏览都限制在 output / archive / backup 目录范围内；
+  删除等写操作会校验目标仍在归档目录内（防目录穿越）。
 
-All external process invocations use an argument list with `shell=False`; executable paths are
-resolved from `PATH` by bare command name only; configuration keys are written through a strict
-allowlist; and file/directory access is confined to the configured output / archive / backup roots.
+No external process is ever launched: video metadata and thumbnails are handled in-process with
+PyAV, and the codebase contains no `subprocess` / `os.system` / `eval` / `exec`. Configuration keys
+are written through a strict allowlist, numeric options are range-checked, and all file/directory
+access is confined to the configured output / archive / backup roots.
 
 ## 📄 License
 

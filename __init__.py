@@ -21,7 +21,7 @@ WEB_DIRECTORY = "web"
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _cfg = assets_core.load_config(BASE_DIR)
@@ -140,10 +140,9 @@ async def asset_set_output_dir(request):
 async def asset_set_config(request):
     """保存配置(在面板里修改所有设置)。
 
-    安全(修复 Comfy Registry policy-v0.2 ARBITRARY_FILE_LAUNCH):
+    安全(修复 Comfy Registry policy-v0.5 command-injection):
     请求体**必须经过键白名单**(assets_core.CLIENT_SETTABLE_KEYS)过滤后才能进入 _cfg;
-    任何未知键(尤其是 ffprobe/ffmpeg 这类可执行文件解析项)一律拒绝并回报 errors,
-    不再出现 `_cfg.update(body)` 这种无过滤合并。
+    任何未知键一律拒绝并回报 errors, 不再出现 `_cfg.update(body)` 这种无过滤合并。
     """
     try:
         body = await request.json()

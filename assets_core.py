@@ -9,7 +9,6 @@ ComfyUI 资产管理插件核心库
 import json
 import os
 import shutil
-import subprocess
 import time
 import zipfile
 from datetime import datetime
@@ -27,46 +26,17 @@ ALL_EXT = IMAGE_EXT | VIDEO_EXT
 NEG_HINTS = ("negative", "neg prompt", "neg", "负")
 
 # ---------------------------------------------------------------------------
-# 安全说明(Security): 可执行文件解析
+# 安全说明(Security): 不启动任何外部进程
 # ---------------------------------------------------------------------------
-# 历史问题(见 Comfy Registry 审核 policy-v0.2 ARBITRARY_FILE_LAUNCH):
-# 旧版 resolve_exe 会把配置里的任意字符串当可执行文件执行, 而配置又能被
+# 历史问题(见 Comfy Registry 审核 policy-v0.5 command-injection /
+# policy-v0.2 ARBITRARY_FILE_LAUNCH):
+# 旧版通过 ffprobe/ffmpeg 读取视频元数据与抽帧, 其可执行文件路径来自配置, 而配置又能被
 # /asset/set_config 的请求体直接改写 -> 未认证请求可注入任意路径导致命令执行。
-# 现策略(收紧): 配置里只接受"命令名"(如 "ffmpeg"), 一律通过 shutil.which()
-# 从 PATH 解析; 任何含路径分隔符的值(绝对/相对路径)都拒绝, 防止指向任意文件。
+#
+# 现策略(彻底移除攻击面): 视频元数据与缩略图改用 PyAV(av) 在**进程内**完成,
+# 本文件不再 import subprocess, 不再解析/执行任何外部可执行文件, 不存在命令注入面。
+# 相应地, 配置里也移除了 ffprobe/ffmpeg 两项。
 # ---------------------------------------------------------------------------
-
-# 允许从 PATH 解析的外部可执行文件命令名白名单(仅这两个用于元数据/缩略图)
-ALLOWED_EXE_NAMES = {"ffprobe", "ffmpeg"}
-
-
-def resolve_exe(name):
-    """把配置里的命令名解析为受信任的可执行文件路径。
-
-    仅接受 ALLOWED_EXE_NAMES 中的命令名, 且必须能通过 shutil.which 在 PATH 中找到。
-    不接受任何带路径分隔符的值(如 C:\\evil.exe 或 ../../evil.exe) -> 直接拒绝。
-    返回绝对路径或 None(不可用)。
-    """
-    if not name or not isinstance(name, str):
-        return None
-    name = name.strip()
-    if not name:
-        return None
-    # 拒绝任何路径形式: 只允许纯命令名, 交给 PATH 解析
-    if os.sep in name or "/" in name or "\\" in name or os.path.isabs(name):
-        return None
-    base = name.lower()
-    if base.endswith(".exe"):
-        base = base[:-4]
-    if base not in ALLOWED_EXE_NAMES:
-        return None
-    found = shutil.which(name)
-    if not found:
-        return None
-    # 二次校验: which 的结果必须是已存在的普通文件
-    if not os.path.isfile(found):
-        return None
-    return found
 
 
 # ---------------------------------------------------------------------------
@@ -81,13 +51,9 @@ DEFAULT_CONFIG = {
     "archive_existing": False,  # 首次运行是否归档 output 里已有的历史产物(False=只归档安装后的新产物)
     "thumb_width": 480,
     "interval_sec": 10,
-    "ffprobe": "ffprobe",  # 只允许命令名, 走 PATH 解析; 由 resolve_exe 严格校验
-    "ffmpeg": "ffmpeg",    # 只允许命令名, 走 PATH 解析; 由 resolve_exe 严格校验
 }
 
-# /asset/set_config 允许客户端修改的键白名单(其余一律忽略并报错)。
-# 注意: ffprobe/ffmpeg 不在其中 —— 它们是可执行文件解析项, 不允许由 HTTP 改写,
-# 需要自定义请直接改插件目录下的 config.json。
+# /asset/set_config 允许客户端修改的键白名单(其余一律忽略并报错)
 CLIENT_SETTABLE_KEYS = {
     "output_dir", "archive_dir", "backup_dir",
     "auto_archive", "archive_existing",
@@ -101,32 +67,11 @@ NUMERIC_LIMITS = {
 }
 
 
-def sanitize_exe_value(key, value):
-    """把配置中的可执行文件项规范化为"仅命令名", 非法值回落为默认命令名。
-
-    即使 config.json 被手工写入 C:\\evil.exe, 这里也会把它归一为安全的默认命令名,
-    使 resolve_exe 永远不会拿到带路径的值。
-    """
-    default = DEFAULT_CONFIG.get(key, "")
-    if not isinstance(value, str):
-        return default
-    v = value.strip()
-    if not v:
-        return default
-    base = v.lower()
-    if base.endswith(".exe"):
-        base = base[:-4]
-    if base in ALLOWED_EXE_NAMES and os.sep not in v and "/" not in v and "\\" not in v:
-        return base
-    return default
-
-
 def load_config(base_dir):
     """读取配置。
 
-    安全约束:
-    - 只接受已知键(与 DEFAULT_CONFIG 取交集), 忽略任何未知/注入字段;
-    - ffprobe/ffmpeg 强制归一到受信任的命令名, 绝不接受磁盘上的任意路径。
+    安全约束: 只接受已知键(与 DEFAULT_CONFIG 取交集), 忽略任何未知/注入字段。
+    配置里已不含任何可执行文件路径, 因此不存在"配置 -> 执行外部程序"的链路。
     """
     cfg = dict(DEFAULT_CONFIG)
     fp = Path(base_dir) / "config.json"
@@ -139,9 +84,6 @@ def load_config(base_dir):
                         cfg[k] = v
         except Exception:
             pass
-    # 可执行文件项不允许来自磁盘任意路径, 只保留受信任的命令名
-    for exe_key in ("ffprobe", "ffmpeg"):
-        cfg[exe_key] = sanitize_exe_value(exe_key, cfg.get(exe_key))
     return cfg
 
 
@@ -225,24 +167,24 @@ def extract_image_metadata(path):
 
 
 def extract_video_metadata(path, cfg):
-    """用 ffprobe 读取视频容器标签里的 prompt/workflow。
+    """读取视频容器标签里的 prompt/workflow。
 
-    安全: fp 只能来自 resolve_exe(受信任命令名 + PATH 解析), 绝不接受用户传入的路径;
-    调用显式 shell=False 且以 list 传参, 杜绝命令注入。
+    实现说明(安全): 使用 PyAV(PyAV/av) 在进程内解析容器元数据, **不启动任何外部进程**,
+    因此既无命令注入面, 也不需要 ffprobe。ComfyUI 运行环境自带 av(以及 ffmpeg 运行库)。
+    读取不到(未安装 av / 无标签)时返回 (None, None), 由上层回落到执行记录兜底。
     """
-    fp = resolve_exe(cfg.get("ffprobe"))
-    if not fp:
-        return None, None
     try:
-        r = subprocess.run(  # noqa: S603 - fp 经 resolve_exe 白名单校验, 参数走 list
-            [fp, "-v", "error", "-show_entries", "format_tags", "-of", "json", str(path)],
-            capture_output=True, timeout=30, shell=False,
-        )
-        data = json.loads(r.stdout.decode("utf-8", errors="replace") or "{}")
+        import av
     except Exception:
         return None, None
-    tags = (data.get("format") or {}).get("tags") or {}
-    return tags.get("prompt"), tags.get("workflow")
+    try:
+        with av.open(str(path)) as container:
+            md = dict(container.metadata or {})
+    except Exception:
+        return None, None
+    prompt = md.get("prompt")
+    workflow = md.get("workflow")
+    return prompt, workflow
 
 
 def parse_prompt_graph(graph):
@@ -307,36 +249,46 @@ def parse_prompt_graph(graph):
 # ---------------------------------------------------------------------------
 
 def make_video_thumb(src, dst, cfg):
-    """用 ffmpeg 抽一帧作为视频缩略图。
+    """抽视频首帧作为缩略图。
 
-    安全: ff 只能来自 resolve_exe(受信任命令名 + PATH 解析); 显式 shell=False。
-    width 被强制夹到安全范围, 避免把任意内容拼进 -vf 参数。
+    实现说明(安全): 使用 PyAV 在进程内解码抽帧并交给 PIL 缩放保存, **不启动任何外部进程**,
+    因此无命令注入面, 也不需要 ffmpeg 可执行文件。
+    读取不到(未安装 av / 解码失败)时返回 None(前端会显示占位图)。
     """
-    ff = resolve_exe(cfg.get("ffmpeg"))
-    if not ff:
+    try:
+        import av
+    except Exception:
         return None
     try:
         width = int(cfg.get("thumb_width", 480))
     except Exception:
         width = 480
     width = max(16, min(width, 4096))
-    for ss in ("0", "1"):
+    try:
+        with av.open(str(src)) as container:
+            if not container.streams.video:
+                return None
+            stream = container.streams.video[0]
+            frame = None
+            for f in container.decode(stream):
+                frame = f
+                break
+            if frame is None:
+                return None
+            img = frame.to_image()
+        if HAS_PIL:
+            img = img.convert("RGB")
+        img.thumbnail((width, width))
+        img.save(str(dst), "JPEG", quality=82, optimize=True)
+        if Path(dst).exists() and Path(dst).stat().st_size > 0:
+            return "thumb.jpg"
+    except Exception:
+        pass
+    if Path(dst).exists():
         try:
-            r = subprocess.run(  # noqa: S603 - ff 经 resolve_exe 白名单校验, 参数走 list
-                [ff, "-y", "-hide_banner", "-loglevel", "error",
-                 "-ss", ss, "-i", str(src), "-frames:v", "1",
-                 "-vf", f"scale={width}:-2", str(dst)],
-                capture_output=True, timeout=60, shell=False,
-            )
-            if r.returncode == 0 and dst.exists() and dst.stat().st_size > 0:
-                return "thumb.jpg"
+            Path(dst).unlink()
         except Exception:
             pass
-        if dst.exists():
-            try:
-                dst.unlink()
-            except Exception:
-                pass
     return None
 
 
