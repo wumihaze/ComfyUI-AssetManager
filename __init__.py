@@ -21,7 +21,7 @@ WEB_DIRECTORY = "web"
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _cfg = assets_core.load_config(BASE_DIR)
@@ -116,8 +116,12 @@ async def asset_set_output_dir(request):
         body = await request.json()
     except Exception:
         body = {}
-    path = (body or {}).get("path", "")
-    path = (path or "").strip()
+    if not isinstance(body, dict):
+        return web.json_response({"ok": False, "error": "Request body must be a JSON object"})
+    path = body.get("path", "")
+    if not isinstance(path, str):
+        return web.json_response({"ok": False, "error": "path must be a string"})
+    path = path.strip()
     if not path:
         return web.json_response({"ok": False, "error": "Missing output directory path"})
     path = os.path.abspath(path)
@@ -134,20 +138,35 @@ async def asset_set_output_dir(request):
 
 @PromptServer.instance.routes.post("/asset/set_config")
 async def asset_set_config(request):
-    """保存配置(在面板里修改所有设置): 支持 output_dir/archive_dir/backup_dir/
-    auto_archive/thumb_width/interval_sec/ffprobe/ffmpeg"""
+    """保存配置(在面板里修改所有设置)。
+
+    安全(修复 Comfy Registry policy-v0.2 ARBITRARY_FILE_LAUNCH):
+    请求体**必须经过键白名单**(assets_core.CLIENT_SETTABLE_KEYS)过滤后才能进入 _cfg;
+    任何未知键(尤其是 ffprobe/ffmpeg 这类可执行文件解析项)一律拒绝并回报 errors,
+    不再出现 `_cfg.update(body)` 这种无过滤合并。
+    """
     try:
         body = await request.json()
     except Exception:
         body = {}
-    updates = dict(body or {})
+    if not isinstance(body, dict):
+        return web.json_response({"ok": False, "error": "Request body must be a JSON object"})
+
+    raw = dict(body)
     errors = []
+    # 1) 键白名单: 未声明的键直接剔除
+    rejected = [k for k in raw.keys() if k not in assets_core.CLIENT_SETTABLE_KEYS]
+    if rejected:
+        for k in rejected:
+            errors.append(f"Config key not allowed: {k}")
+    updates = {k: v for k, v in raw.items() if k in assets_core.CLIENT_SETTABLE_KEYS}
     new_arch = None
 
-    # 目录类: 规范化 + 建目录
+    # 2) 目录类: 规范化 + 建目录
     for key in ("archive_dir", "backup_dir", "output_dir"):
         if key in updates:
-            val = (updates[key] or "").strip()
+            val = updates[key]
+            val = val.strip() if isinstance(val, str) else ""
             if key == "output_dir" and not val:
                 updates[key] = ""  # 空=恢复 ComfyUI 默认 output
                 continue
@@ -162,21 +181,26 @@ async def asset_set_config(request):
             else:
                 updates.pop(key, None)
 
-    # 数值类
-    for key in ("thumb_width", "interval_sec"):
+    # 3) 数值类: 必须为整数且在合法区间
+    for key, (lo, hi) in assets_core.NUMERIC_LIMITS.items():
         if key in updates:
             try:
-                updates[key] = int(updates[key])
-                if updates[key] <= 0:
+                v = int(updates[key])
+                if v < lo or v > hi:
                     raise ValueError
+                updates[key] = v
             except Exception:
-                errors.append(f"{key} must be a positive integer")
+                errors.append(f"{key} must be an integer in [{lo}, {hi}]")
                 updates.pop(key, None)
 
-    if "auto_archive" in updates:
-        updates["auto_archive"] = bool(updates["auto_archive"])
-    if "archive_existing" in updates:
-        updates["archive_existing"] = bool(updates["archive_existing"])
+    # 4) 布尔类: 只接受真正的 bool(避免字符串 "false" 被 bool() 判成 True)
+    for key in ("auto_archive", "archive_existing"):
+        if key in updates:
+            if isinstance(updates[key], bool):
+                pass
+            else:
+                errors.append(f"{key} must be a boolean")
+                updates.pop(key, None)
 
     global _arch, _state
     with _LOCK:
@@ -201,7 +225,11 @@ async def asset_delete(request):
         body = await request.json()
     except Exception:
         body = {}
-    run_id = (body or {}).get("run_id")
+    if not isinstance(body, dict):
+        return web.json_response({"ok": False, "error": "Request body must be a JSON object"})
+    run_id = body.get("run_id")
+    if run_id is not None and not isinstance(run_id, str):
+        return web.json_response({"ok": False, "error": "run_id must be a string"})
 
     def _go():
         with _LOCK:
@@ -217,9 +245,15 @@ async def asset_delete_batch(request):
         body = await request.json()
     except Exception:
         body = {}
-    run_ids = (body or {}).get("run_ids") or []
+    if not isinstance(body, dict):
+        return web.json_response({"ok": False, "error": "Request body must be a JSON object"})
+    run_ids = body.get("run_ids") or []
     if not isinstance(run_ids, list):
         return web.json_response({"ok": False, "error": "run_ids must be an array"})
+    # 只保留字符串元素, 防止非字符串进入路径拼接
+    run_ids = [r for r in run_ids if isinstance(r, str)]
+    if len(run_ids) > 500:
+        return web.json_response({"ok": False, "error": "too many run_ids (max 500)"})
 
     def _go():
         deleted, failed = 0, []
@@ -270,6 +304,8 @@ async def asset_backup(request):
 @PromptServer.instance.routes.get("/asset/file")
 async def asset_file(request):
     rel = request.rel_url.query.get("p", "")
+    if not isinstance(rel, str):
+        return web.Response(status=400, text="bad request")
     p = assets_core.safe_media_path(_arch, rel)
     if not p:
         return web.Response(status=404, text="not found")
@@ -279,6 +315,8 @@ async def asset_file(request):
 @PromptServer.instance.routes.get("/asset/workflow")
 async def asset_workflow(request):
     rel = request.rel_url.query.get("p", "")
+    if not isinstance(rel, str):
+        return web.Response(status=400, text="bad request")
     p = assets_core.safe_media_path(_arch, rel)
     if not p:
         return web.Response(status=404, text="not found")
@@ -318,6 +356,10 @@ async def asset_browse_dir(request):
     import string
     path = request.rel_url.query.get("path", "")
     try:
+        if not isinstance(path, str):
+            return web.json_response({"ok": False, "error": "path must be a string"})
+        if len(path) > 4096:
+            return web.json_response({"ok": False, "error": "path too long"})
         if not path:
             drives = [d + ":\\" for d in string.ascii_uppercase if os.path.exists(d + ":\\")]
             return web.json_response({"ok": True, "path": "", "parent": None, "dirs": drives})
