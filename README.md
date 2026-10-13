@@ -113,6 +113,26 @@ A `config.json` is generated on your first settings save (template at [`config.e
 - The archive directory can be migrated anytime — just change `archive_dir` in settings (old data stays where it was).<br>
   归档目录可随时迁移，只要在设置里改 `archive_dir` 即可（旧数据保留在原目录）。
 
+### 🔍 为什么有的产物"未检测到提示词"？ · Troubleshooting prompt extraction
+
+提示词优先从**文件内嵌元数据**读取（PNG `tEXt` / WebP `EXIF` / MP4-MKV ffmpeg tag）。
+文件里没有元数据时，插件会再从 **ComfyUI 服务端执行记录**里按文件名找回当时那次执行的
+提示词与工作流，所以正常情况下跑出来的图都能带上提示词。<br>
+Prompts are read from the file's embedded metadata first; if absent, the plugin falls back to
+ComfyUI's server-side execution history (matched by output filename), so generated images normally
+carry their prompt.
+
+预览弹窗会说明具体原因，常见三种：
+
+| 提示 | 含义 | 怎么办 |
+|---|---|---|
+| ⚠ 文件本身不带 ComfyUI 元数据 | 图片不是 ComfyUI 直接存的：浏览器另存、手机/微信转存后拖进 output 目录；或 ComfyUI 启动时带了 `--disable-metadata`（隐私模式） | 用「保存图像 / SaveImage」节点跑出来的图会自动归档并带上提示词；若用了 `--disable-metadata`，去掉该参数即可 |
+| 这次运行没有文本提示词节点 | 工作流里确实没有 CLIPTextEncode 一类节点（纯图像处理、证件照、放大等工作流） | 正常现象，无需处理 |
+| 提示词由 ComfyUI 执行记录找回 | 文件本身没写元数据，但已从服务端历史补回 | 正常现象（说明该文件不带元数据，但提示词已找回） |
+
+> 注：归档是复制原始文件，**不会**给你的图片补写元数据；找回的提示词只写进归档目录的
+> `info.json` / `prompt.txt` / `workflow.json`。
+
 ## 📄 License
 
 [MIT](LICENSE) © 2026 Wumihaze

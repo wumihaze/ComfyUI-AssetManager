@@ -490,6 +490,39 @@ app.registerExtension({
     }
 
     // ---------- 预览 ----------
+    // 没有提示词时按原因给"可操作"的说明 —— 笼统的"未检测到提示词"是 issue #1 的抱怨点:
+    // 用户看不出是"文件里本来就没有"还是"插件没提取到"。
+    function promptHint(r) {
+      if (r.positive) {
+        // 有提示词: 若来自服务端兜底, 注明来源, 免得误以为文件自带元数据
+        if (r.prompt_source === "history") {
+          return $el("div", {
+            style: { fontSize: "11px", color: "var(--descrip-text,#aaa)", marginTop: "6px" },
+            textContent: LANG === "zh"
+              ? "提示词由 ComfyUI 执行记录找回(该文件本身不带元数据)。"
+              : "Prompt recovered from ComfyUI execution history (the file itself carries no metadata).",
+          });
+        }
+        return null;
+      }
+      let msg;
+      if (r.no_prompt_reason === "no_embedded_metadata") {
+        msg = LANG === "zh"
+          ? "⚠ 这个文件本身不带 ComfyUI 元数据。常见原因: 从浏览器另存、手机/微信转存后拖进 output 目录的图片, 或 ComfyUI 启动时加了 --disable-metadata。这类文件没有提示词可提取; 用「保存图像 / SaveImage」节点跑出来的图会自动归档并带上提示词。"
+          : "⚠ This file carries no ComfyUI metadata. Common causes: an image saved from the browser, a phone/WeChat transfer dropped into the output directory, or ComfyUI started with --disable-metadata. Such files have no prompt to extract; images produced through a SaveImage node are archived with their prompt.";
+      } else if (r.no_prompt_reason === "no_text_nodes") {
+        msg = LANG === "zh"
+          ? "这次运行没有文本提示词节点(例如纯图像处理、证件照类工作流), 所以没有提示词可提取。"
+          : "This run has no text prompt node (e.g. a pure image-processing or ID-photo workflow), so there is no prompt to extract.";
+      } else {
+        msg = t("(未检测到提示词)");
+      }
+      return $el("div", {
+        style: { fontSize: "11px", color: "#e0a24a", marginTop: "6px", lineHeight: "1.6" },
+        textContent: msg,
+      });
+    }
+
     function openPreview(r) {
       const m = $el("div.asm-modal");
       m.style.display = "flex";
@@ -498,6 +531,7 @@ app.registerExtension({
         ? $el("video", { src: full, controls: true, autoplay: true, muted: true, playsinline: true })
         : $el("img", { src: full });
       const ta = $el("textarea", { textContent: (r.positive || "") + (r.negative ? "\n\nNegative prompt: " + r.negative : "") });
+      const ph = promptHint(r);
       const models = (r.models || []).join(", ") || "—";
       const params = Object.keys(r.params || {}).map(k => k + "=" + r.params[k]).join(" · ") || "—";
       const pn = $el("div.pn", {}, [
@@ -510,6 +544,7 @@ app.registerExtension({
         ]),
         bindText($el("label", { style: { fontSize: "12px" } }), "提示词"),
         ta,
+        ...(ph ? [ph] : []),
         $el("div.btns", {}, [
           bindText($el("button.asm-btn", { onclick: () => { ta.select(); navigator.clipboard?.writeText(ta.value).then(() => statusMsg(t("已复制"))); } }), "复制提示词"),
           bindText($el("button.asm-btn.primary", { onclick: () => downloadWorkflow(r) }), "下载 workflow.json"),

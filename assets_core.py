@@ -247,7 +247,7 @@ def make_video_thumb(src, dst, cfg):
     return None
 
 
-def archive_file(rel, src, archive_dir, state, cfg):
+def archive_file(rel, src, archive_dir, state, cfg, prompt_resolver=None):
     st = os.stat(src)
     state_key = {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
     if state.get(rel) == state_key:
@@ -260,10 +260,38 @@ def archive_file(rel, src, archive_dir, state, cfg):
         prompt_raw, workflow_raw = extract_image_metadata(src)
     else:
         prompt_raw, workflow_raw = extract_video_metadata(src, cfg)
+
+    # 文件里没有元数据时, 从 ComfyUI 服务端执行历史按文件名找回
+    # (覆盖: 外部拖进来的图 / --disable-metadata / 不写元数据的保存节点)
+    prompt_source = "file"
+    if not prompt_raw and prompt_resolver is not None:
+        try:
+            hit = prompt_resolver(rel, src)
+        except Exception:
+            hit = None
+        if hit:
+            try:
+                hist_prompt, hist_workflow = hit
+                if isinstance(hist_prompt, dict) and hist_prompt:
+                    prompt_raw = json.dumps(hist_prompt, ensure_ascii=False)
+                    prompt_source = "history"
+                if workflow_raw is None and isinstance(hist_workflow, dict) and hist_workflow:
+                    workflow_raw = json.dumps(hist_workflow, ensure_ascii=False)
+            except Exception:
+                pass
+
     prompt_graph = safe_json(prompt_raw)
     workflow_graph = safe_json(workflow_raw)
     parsed = parse_prompt_graph(prompt_graph) if prompt_graph else \
         {"positive": "", "negative": "", "texts": [], "params": {}, "models": []}
+
+    # 没有提示词的原因分类(给面板显示针对性说明用)
+    if prompt_graph is None:
+        no_prompt_reason = "no_embedded_metadata"
+    elif not (parsed.get("texts") or []):
+        no_prompt_reason = "no_text_nodes"
+    else:
+        no_prompt_reason = ""
 
     stem = Path(rel).stem
     safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in stem)[:60].strip("._")
@@ -310,6 +338,8 @@ def archive_file(rel, src, archive_dir, state, cfg):
         "thumb": thumb,
         "prompt_json": prompt_graph,
         "workflow_json": workflow_graph,
+        "prompt_source": prompt_source,
+        "no_prompt_reason": no_prompt_reason,
     }
     (run_dir / "info.json").write_text(
         json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -335,7 +365,7 @@ def archive_file(rel, src, archive_dir, state, cfg):
     return {"run": run_dir.name, "dir": run_dir.relative_to(arch).as_posix(), "kind": kind}
 
 
-def scan_all(output_dir, archive_dir, state, cfg):
+def scan_all(output_dir, archive_dir, state, cfg, prompt_resolver=None):
     out = Path(output_dir)
     if not out.is_dir():
         return 0
@@ -377,12 +407,12 @@ def scan_all(output_dir, archive_dir, state, cfg):
                 continue
             if rel in state:
                 # 已记录过(归档过或基线过), 文件有变化 → 归档新版本
-                r = archive_file(rel, src, archive_dir, state, cfg)
+                r = archive_file(rel, src, archive_dir, state, cfg, prompt_resolver)
                 if r:
                     new_runs.append(r)
             elif baseline_done or archive_existing:
                 # 基线已建立后的新文件, 或用户开启"归档历史" → 归档
-                r = archive_file(rel, src, archive_dir, state, cfg)
+                r = archive_file(rel, src, archive_dir, state, cfg, prompt_resolver)
                 if r:
                     new_runs.append(r)
             else:
@@ -431,6 +461,8 @@ def list_runs(archive_dir):
                 "models": info.get("models") or [],
                 "params": info.get("params") or {},
                 "has_workflow": bool(info.get("has_workflow")),
+                "prompt_source": info.get("prompt_source") or "file",
+                "no_prompt_reason": info.get("no_prompt_reason") or "",
             })
     runs.sort(key=lambda r: r.get("time") or "", reverse=True)
     return runs

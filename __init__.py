@@ -15,12 +15,13 @@ import threading
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import assets_core
+from prompt_history import PromptHistoryIndex
 
 WEB_DIRECTORY = "web"
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _cfg = assets_core.load_config(BASE_DIR)
@@ -51,6 +52,20 @@ def _current_output_dir():
     return (_cfg.get("output_dir") or "").strip()
 
 
+# ---------------------------------------------------------------------------
+# 提示词兜底索引: 从 ComfyUI 服务端执行历史按文件名找回 prompt/workflow,
+# 解决"文件没内嵌元数据 -> 面板显示未检测到提示词"(外部拖入的图 / --disable-metadata
+# / 不写元数据的保存节点)。服务端不可用时自动停用, 不影响插件其它功能。
+# ---------------------------------------------------------------------------
+_hist = PromptHistoryIndex()
+
+
+def _prompt_resolver(rel, src):
+    """给 assets_core 用的回查函数: 返回 (prompt_graph, workflow_graph) 或 None"""
+    _hist.refresh()
+    return _hist.lookup(rel, src)
+
+
 def _watch_loop():
     while not _stop.is_set():
         if _cfg.get("auto_archive", True):
@@ -58,7 +73,7 @@ def _watch_loop():
                 out = _current_output_dir()
                 if out:
                     with _LOCK:
-                        assets_core.scan_all(out, _arch, _state, _cfg)
+                        assets_core.scan_all(out, _arch, _state, _cfg, _prompt_resolver)
             except Exception:
                 pass
         _stop.wait(float(_cfg.get("interval_sec", 10)))
@@ -91,6 +106,7 @@ async def asset_config(request):
         "archive_dir": _arch,
         "current_output_dir": _current_output_dir(),
         "default_backup_dir": _bak_default,
+        "prompt_history": _hist.stats(),
     })
 
 
@@ -222,9 +238,12 @@ async def asset_delete_batch(request):
 
 @PromptServer.instance.routes.post("/asset/scan")
 async def asset_scan(request):
+    # 强制刷新一次服务端提示词索引: 刚跑完的任务要能立刻按文件名找回 prompt
+    _hist.refresh(force=True)
+
     def _go():
         with _LOCK:
-            return assets_core.scan_all(_current_output_dir(), _arch, _state, _cfg)
+            return assets_core.scan_all(_current_output_dir(), _arch, _state, _cfg, _prompt_resolver)
 
     n = await asyncio.to_thread(_go)
     return web.json_response({"ok": True, "new": n})
