@@ -23,7 +23,7 @@ WEB_DIRECTORY = "web"
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 
-__version__ = "1.0.10"
+__version__ = "1.0.11"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _cfg = assets_core.load_config(BASE_DIR)
@@ -350,12 +350,18 @@ async def asset_category(request):
     name = body.get("name")
     category_id = body.get("id")
     parent = body.get("parent")
+    direction = body.get("direction")
+    pinned = body.get("pinned")
     if category_id is not None and not isinstance(category_id, str):
         return web.json_response({"ok": False, "error": "id must be a string"})
     if name is not None and not isinstance(name, str):
         return web.json_response({"ok": False, "error": "name must be a string"})
     if parent is not None and not isinstance(parent, str):
         return web.json_response({"ok": False, "error": "parent must be a string"})
+    if direction is not None and not isinstance(direction, str):
+        return web.json_response({"ok": False, "error": "direction must be a string"})
+    if pinned is not None and not isinstance(pinned, bool):
+        return web.json_response({"ok": False, "error": "pinned must be a boolean"})
 
     def _go():
         try:
@@ -366,6 +372,12 @@ async def asset_category(request):
                     return assets_core.rename_category(_arch, category_id, name)
                 if action == "delete":
                     return assets_core.delete_category(_arch, category_id)
+                if action == "move":
+                    return assets_core.move_category(_arch, category_id, direction)
+                if action == "pin":
+                    if pinned is None:
+                        return {"ok": False, "error": "pinned must be a boolean"}
+                    return assets_core.set_category_pinned(_arch, category_id, pinned)
                 return {"ok": False, "error": "Unknown action"}
         except Exception as exc:  # 归档目录不可写/不存在时不要抛 500
             return {"ok": False, "error": "Category operation failed: %s" % exc}

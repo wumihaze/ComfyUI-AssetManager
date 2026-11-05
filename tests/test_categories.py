@@ -101,6 +101,154 @@ class CategoryStoreTests(unittest.TestCase):
             self.assertEqual(assets_core.load_categories(td)["categories"], [])
 
 
+class CategoryOrderTests(unittest.TestCase):
+    """顺序调整(上移/下移) 与 置顶。"""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.td = self._td.name
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def names(self):
+        return [c["name"] for c in assets_core.load_categories(self.td)["categories"]]
+
+    def make(self, *names, parent=None):
+        ids = {}
+        for n in names:
+            r = assets_core.create_category(self.td, n, parent)
+            self.assertTrue(r["ok"], r)
+            ids[n] = r["category"]["id"]
+        return ids
+
+    def test_creation_order_is_kept(self):
+        self.make("A", "B", "C")
+        self.assertEqual(self.names(), ["A", "B", "C"])
+
+    def test_move_up_swaps_neighbour(self):
+        ids = self.make("A", "B", "C")
+        r = assets_core.move_category(self.td, ids["C"], "up")
+        self.assertTrue(r["ok"])
+        self.assertTrue(r["moved"])
+        self.assertEqual(self.names(), ["A", "C", "B"])
+
+    def test_move_down_swaps_neighbour(self):
+        ids = self.make("A", "B", "C")
+        self.assertTrue(assets_core.move_category(self.td, ids["A"], "down")["moved"])
+        self.assertEqual(self.names(), ["B", "A", "C"])
+
+    def test_move_up_at_top_is_noop(self):
+        ids = self.make("A", "B")
+        r = assets_core.move_category(self.td, ids["A"], "up")
+        self.assertTrue(r["ok"])
+        self.assertFalse(r["moved"])
+        self.assertEqual(self.names(), ["A", "B"])
+
+    def test_move_down_at_bottom_is_noop(self):
+        ids = self.make("A", "B")
+        self.assertFalse(assets_core.move_category(self.td, ids["B"], "down")["moved"])
+        self.assertEqual(self.names(), ["A", "B"])
+
+    def test_bad_direction_rejected(self):
+        ids = self.make("A")
+        r = assets_core.move_category(self.td, ids["A"], "sideways")
+        self.assertFalse(r["ok"])
+        self.assertEqual(r["error"], "Invalid direction")
+
+    def test_unknown_category_rejected(self):
+        self.make("A")
+        self.assertFalse(assets_core.move_category(self.td, "nope", "up")["ok"])
+        self.assertFalse(assets_core.set_category_pinned(self.td, "nope", True)["ok"])
+
+    def test_children_are_reordered_inside_their_parent(self):
+        ids = self.make("角色")
+        kids = self.make("子1", "子2", "子3", parent=ids["角色"])
+        self.assertEqual(self.names(), ["角色", "子1", "子2", "子3"])
+        assets_core.move_category(self.td, kids["子1"], "down")
+        self.assertEqual(self.names(), ["角色", "子2", "子1", "子3"])
+        # 子分类不能越过父分类跑到前面
+        for _ in range(5):
+            assets_core.move_category(self.td, kids["子3"], "up")
+        self.assertEqual(self.names()[0], "角色")
+        self.assertEqual(self.names(), ["角色", "子3", "子2", "子1"])
+
+    def test_order_values_are_dense_per_level(self):
+        ids = self.make("A", "B", "C")
+        assets_core.move_category(self.td, ids["C"], "up")
+        orders = [c["order"] for c in assets_core.load_categories(self.td)["categories"]]
+        self.assertEqual(orders, [0, 1, 2])
+
+    def test_pin_moves_to_top(self):
+        ids = self.make("A", "B", "C")
+        r = assets_core.set_category_pinned(self.td, ids["C"], True)
+        self.assertTrue(r["ok"])
+        self.assertEqual(self.names(), ["C", "A", "B"])
+
+    def test_unpin_moves_to_bottom(self):
+        ids = self.make("A", "B", "C")
+        assets_core.set_category_pinned(self.td, ids["A"], True)
+        self.assertEqual(self.names(), ["A", "B", "C"])
+        assets_core.set_category_pinned(self.td, ids["A"], False)
+        self.assertEqual(self.names(), ["B", "C", "A"])
+
+    def test_pinned_beat_unpinned_regardless_of_order(self):
+        ids = self.make("A", "B", "C", "D")
+        assets_core.set_category_pinned(self.td, ids["C"], True)
+        assets_core.set_category_pinned(self.td, ids["D"], True)
+        # 后置顶的排到置顶区最前
+        self.assertEqual(self.names(), ["D", "C", "A", "B"])
+
+    def test_move_never_crosses_the_pin_boundary(self):
+        ids = self.make("A", "B", "C")
+        assets_core.set_category_pinned(self.td, ids["C"], True)
+        self.assertEqual(self.names(), ["C", "A", "B"])
+        # 未置顶的 B 上移只能到未置顶区顶部, 不会挤掉置顶的 C
+        assets_core.move_category(self.td, ids["B"], "up")
+        self.assertEqual(self.names(), ["C", "B", "A"])
+        # 置顶的 C 下移没有同类邻居 → 不动
+        self.assertFalse(assets_core.move_category(self.td, ids["C"], "down")["moved"])
+        self.assertEqual(self.names(), ["C", "B", "A"])
+
+    def test_pin_is_per_level(self):
+        ids = self.make("角色")
+        kids = self.make("子1", "子2", parent=ids["角色"])
+        assets_core.set_category_pinned(self.td, kids["子2"], True)
+        items = assets_core.load_categories(self.td)["categories"]
+        self.assertEqual([c["name"] for c in items], ["角色", "子2", "子1"])
+        self.assertFalse(next(c for c in items if c["name"] == "角色")["pinned"])
+
+    def test_legacy_file_without_order_loads_in_file_order(self):
+        """旧版 categories.json 没有 order/pinned, 按文件里的先后顺序显示。"""
+        data = {"categories": [
+            {"id": "aaa", "name": "三"},
+            {"id": "bbb", "name": "一"},
+            {"id": "ccc", "name": "二"},
+        ]}
+        (Path(self.td) / "categories.json").write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        items = assets_core.load_categories(self.td)["categories"]
+        self.assertEqual([c["name"] for c in items], ["三", "一", "二"])
+        self.assertEqual([c["order"] for c in items], [0, 1, 2])
+        self.assertTrue(all(c["pinned"] is False for c in items))
+
+    def test_duplicate_order_values_are_normalised(self):
+        data = {"categories": [
+            {"id": "aaa", "name": "A", "order": 5},
+            {"id": "bbb", "name": "B", "order": 5},
+            {"id": "ccc", "name": "C", "order": 5},
+        ]}
+        (Path(self.td) / "categories.json").write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        items = assets_core.load_categories(self.td)["categories"]
+        self.assertEqual([c["order"] for c in items], [0, 1, 2])
+        # 顺序重复时用名称兜底, 且仍然可以正常换位
+        self.assertEqual([c["name"] for c in items], ["A", "B", "C"])
+        assets_core.move_category(self.td, "ccc", "up")
+        self.assertEqual([c["name"] for c in assets_core.load_categories(self.td)["categories"]],
+                         ["A", "C", "B"])
+
+
 class CategoryNestingTests(unittest.TestCase):
     def test_child_is_stored_under_parent(self):
         with tempfile.TemporaryDirectory() as td:

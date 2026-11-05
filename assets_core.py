@@ -163,6 +163,25 @@ def _normalize_parents(items):
     return items
 
 
+def _order_key(item):
+    """显示顺序: 置顶的永远在前, 其余按 order, 最后按名称兜底。"""
+    return (0 if item.get("pinned") else 1, item["order"], item["name"].casefold())
+
+
+def _renumber(items):
+    """把 order 重新编号成每层(含置顶状态)各从 0 开始的连续值。
+
+    历史数据里 order 可能是文件下标或有重复, 重排一次后"交换两个相邻项"
+    才一定真的换位。
+    """
+    counters = {}
+    for c in items:
+        key = (c.get("parent") or None, bool(c.get("pinned")))
+        c["order"] = counters.get(key, 0)
+        counters[key] = c["order"] + 1
+    return items
+
+
 def load_categories(archive_dir):
     """读取分类清单, 对损坏/异常内容保持容错, 只返回结构合法的条目。"""
     try:
@@ -187,10 +206,21 @@ def load_categories(archive_dir):
             "name": name,
             "order": order if isinstance(order, int) else idx,
             "parent": parent if isinstance(parent, str) and parent else None,
+            "pinned": bool(item.get("pinned")),
         })
     out = _normalize_parents(out)
-    out.sort(key=lambda c: c["order"])
-    return {"categories": out[:CATEGORY_LIMIT]}
+    # 返回"显示顺序"的扁平列表: 每个一级分类后面紧跟它自己的子分类
+    kids = {}
+    for c in out:
+        p = c.get("parent")
+        if p:
+            kids.setdefault(p, []).append(c)
+    ordered = []
+    for root in sorted([c for c in out if not c.get("parent")], key=_order_key):
+        ordered.append(root)
+        ordered.extend(sorted(kids.get(root["id"], []), key=_order_key))
+    _renumber(ordered)
+    return {"categories": ordered[:CATEGORY_LIMIT]}
 
 
 def save_categories(archive_dir, data):
@@ -247,6 +277,56 @@ def rename_category(archive_dir, category_id, name):
             save_categories(archive_dir, data)
             return {"ok": True, "categories": data["categories"]}
     return {"ok": False, "error": "Category not found"}
+
+
+def move_category(archive_dir, category_id, direction):
+    """在同层、同置顶状态的分组里上移/下移一格。
+
+    置顶项只在置顶区里换位, 未置顶项只在未置顶区里换位 —— 否则"上移"
+    看起来会毫无反应(置顶状态才是第一排序键)。
+    """
+    if direction not in ("up", "down"):
+        return {"ok": False, "error": "Invalid direction"}
+    data = load_categories(archive_dir)
+    items = data["categories"]
+    target = next((c for c in items if c["id"] == category_id), None)
+    if target is None:
+        return {"ok": False, "error": "Category not found"}
+    group = [c for c in _siblings(items, target.get("parent"))
+             if bool(c.get("pinned")) == bool(target.get("pinned"))]
+    group.sort(key=lambda c: (c["order"], c["name"].casefold()))
+    idx = next((i for i, c in enumerate(group) if c["id"] == category_id), -1)
+    if idx < 0:
+        return {"ok": False, "error": "Category not found"}
+    other = idx - 1 if direction == "up" else idx + 1
+    if other < 0 or other >= len(group):
+        return {"ok": True, "moved": False, "categories": items}
+    a, b = group[idx], group[other]
+    a["order"], b["order"] = b["order"], a["order"]
+    save_categories(archive_dir, data)
+    return {"ok": True, "moved": True, "categories": load_categories(archive_dir)["categories"]}
+
+
+def set_category_pinned(archive_dir, category_id, pinned):
+    """置顶/取消置顶。置顶后落到同层置顶区最前, 取消后落到未置顶区最后。"""
+    data = load_categories(archive_dir)
+    items = data["categories"]
+    target = next((c for c in items if c["id"] == category_id), None)
+    if target is None:
+        return {"ok": False, "error": "Category not found"}
+    pinned = bool(pinned)
+    if bool(target.get("pinned")) == pinned:
+        return {"ok": True, "pinned": pinned, "categories": items}
+    target["pinned"] = pinned
+    peers = [c for c in _siblings(items, target.get("parent"))
+             if c["id"] != category_id and bool(c.get("pinned")) == pinned]
+    if pinned:
+        target["order"] = min([c["order"] for c in peers], default=0) - 1
+    else:
+        target["order"] = max([c["order"] for c in peers], default=-1) + 1
+    save_categories(archive_dir, data)
+    return {"ok": True, "pinned": pinned,
+            "categories": load_categories(archive_dir)["categories"]}
 
 
 def delete_category(archive_dir, category_id):

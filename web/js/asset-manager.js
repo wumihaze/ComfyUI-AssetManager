@@ -37,6 +37,7 @@ const STYLE = `
 .asm-side .asm-it .tx { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .asm-side .asm-it .n { flex:0 0 auto; font-size:10px; color:var(--descrip-text,#8a8a8a); }
 .asm-side .asm-it.on .n { color:#9db8ff; }
+.asm-side .asm-it .pinmark { flex:0 0 auto; font-size:9px; line-height:1; opacity:.9; }
 /* 子分类: 缩进 + 一条竖线, 一眼看出层级 */
 .asm-side .asm-it.child { padding-left:18px; border-left:2px solid rgba(91,140,255,.40); border-radius:4px 6px 6px 4px; margin-left:6px; }
 .asm-side .asm-it.child .tx { font-size:11.5px; }
@@ -81,6 +82,14 @@ const STYLE = `
 .asm-mini { background:var(--comfy-input-bg,#333); border:1px solid var(--border-color,#444); color:var(--fg-color,#eee); border-radius:6px; padding:4px 9px; font-size:12px; cursor:pointer; }
 .asm-mini:hover { border-color:#5b8cff; }
 .asm-mini.danger { color:#ff8b82; border-color:rgba(179,55,47,.6); }
+/* 置顶 / 排序按钮 */
+.asm-mini.pin { padding:4px 6px; opacity:.45; filter:grayscale(1); }
+.asm-mini.pin.on { opacity:1; filter:none; border-color:rgba(255,209,102,.6); background:rgba(255,209,102,.14); }
+.asm-mini.pin:hover { opacity:.85; }
+.asm-mini.pin.on:hover { opacity:1; }
+.asm-mini:disabled { opacity:.25; cursor:default; }
+.asm-mini:disabled:hover { border-color:var(--border-color,#444); }
+.asm-catrow.manage .asm-mini { padding:4px 7px; }
 .asm-mini-input { flex:1; min-width:0; background:var(--comfy-input-bg,#333); border:1px solid var(--border-color,#444); color:var(--input-text,#eee); border-radius:6px; padding:6px 8px; font-size:13px; }
 .asm-card { background:var(--comfy-input-bg,#2a2a2a); border:1px solid var(--border-color,#444); border-radius:8px; overflow:hidden; cursor:pointer; }
 .asm-card:hover { border-color:#5b8cff; }
@@ -212,6 +221,16 @@ app.registerExtension({
       "新分类名称": "New category name",
       "分类可以分两级：点 ＋ 在某个分类下新建子分类。删除分类不会删除文件。":
         "Categories can nest one level: click ＋ on a category to add a sub-category. Deleting a category never deletes files.",
+      "点 ＋ 在某个分类下新建子分类；📌 置顶，↑↓ 调整顺序。删除分类不会删除文件。":
+        "Click ＋ to add a sub-category; 📌 pins it to the top, ↑↓ reorders. Deleting a category never deletes files.",
+      "置顶": "Pin to top",
+      "取消置顶": "Unpin",
+      "已置顶": "Pinned",
+      "已取消置顶": "Unpinned",
+      "置顶失败": "Pin failed",
+      "上移": "Move up",
+      "下移": "Move down",
+      "调整顺序失败": "Reorder failed",
       " 个子分类已上移": " sub-categories moved up",
       "新建失败": "Create failed",
       "⚙ 管理分类": "⚙ Categories",
@@ -512,11 +531,12 @@ app.registerExtension({
     // 不用下拉: 归档多了文件夹会有上百项, 下拉里翻找又慢又看不到全貌。
     const side = $el("div.asm-side");
 
-    function sideItem(label, count, active, kind, value, onClick) {
+    function sideItem(label, count, active, kind, value, onClick, pinned) {
       const b = $el("button.asm-it" + (active ? ".on" : ""));
       b.dataset.k = kind;
       if (value === null) b.dataset.all = "1";   // "全部" 项: 不写 data-v
       else b.dataset.v = value;
+      if (pinned) b.appendChild($el("span.pinmark", { textContent: "📌", title: t("已置顶") }));
       b.appendChild($el("span.tx", { textContent: label, title: label }));
       b.appendChild($el("span.n", { textContent: String(count) }));
       b.onclick = onClick;
@@ -560,10 +580,10 @@ app.registerExtension({
 
       for (const root of rootCategories()) {
         cList.appendChild(sideItem(root.name, catCount(root.id), catFilter === root.id, "c", root.id,
-          () => { catFilter = root.id; refresh(); }));
+          () => { catFilter = root.id; refresh(); }, root.pinned));
         for (const kid of kidsOf(root.id)) {
           const it = sideItem(kid.name, catCount(kid.id), catFilter === kid.id, "c", kid.id,
-            () => { catFilter = kid.id; refresh(); });
+            () => { catFilter = kid.id; refresh(); }, kid.pinned);
           it.classList.add("child");
           cList.appendChild(it);
         }
@@ -1065,6 +1085,33 @@ app.registerExtension({
       return true;
     }
 
+    async function moveCategory(id, direction) {
+      const res = await fetch("/asset/category", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "move", id, direction }),
+      });
+      const d = await res.json();
+      if (!d.ok) { statusMsg(terr(d.error) || t("调整顺序失败")); return false; }
+      categories = d.categories || categories;
+      renderSide();
+      return true;
+    }
+
+    async function pinCategory(id, pinned) {
+      const res = await fetch("/asset/category", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "pin", id, pinned }),
+      });
+      const d = await res.json();
+      if (!d.ok) { statusMsg(terr(d.error) || t("置顶失败")); return false; }
+      categories = d.categories || categories;
+      renderSide();
+      statusMsg(pinned ? t("已置顶") : t("已取消置顶"));
+      return true;
+    }
+
     async function removeCategory(c) {
       const n = runs.filter(r => r.category === c.id).length;
       const kids = categories.filter(x => x.parent === c.id).length;
@@ -1096,7 +1143,7 @@ app.registerExtension({
       pn.appendChild($el("button.x", { textContent: "✕", onclick: () => m.remove() }));
       pn.appendChild($el("h3", { textContent: t("管理分类") }));
       pn.appendChild($el("div.asm-assign-hint", {
-        textContent: t("分类可以分两级：点 ＋ 在某个分类下新建子分类。删除分类不会删除文件。"),
+        textContent: t("点 ＋ 在某个分类下新建子分类；📌 置顶，↑↓ 调整顺序。删除分类不会删除文件。"),
       }));
 
       const list = $el("div.asm-catlist");
@@ -1104,6 +1151,14 @@ app.registerExtension({
       let addingUnder = null;   // 正在哪个分类下新建子分类
 
       function countOf(id) { return catCount(id); }
+
+      // 同一层、同一置顶状态下的显示顺序(与侧栏一致), 用来判断 ↑↓ 是否可用
+      function siblingsOf(c) {
+        const par = c.parent || null;
+        return categories
+          .filter(x => (x.parent || null) === par && !!x.pinned === !!c.pinned)
+          .sort((a, b) => a.order - b.order);
+      }
 
       function addRow(parentId, isChild) {
         const input = $el("input.asm-mini-input", { type: "text" });
@@ -1158,6 +1213,22 @@ app.registerExtension({
         rename.onclick = () => { editingId = c.id; renderList(); };
         const del = $el("button.asm-mini.danger", { textContent: "✕", title: t("删除分类") });
         del.onclick = async () => { if (await removeCategory(c)) renderList(); };
+
+        // 置顶 + 上移/下移: 只在"同层 + 同置顶状态"的邻居之间换位
+        const peers = siblingsOf(c);
+        const at = peers.findIndex(x => x.id === c.id);
+        const pin = $el("button.asm-mini.pin" + (c.pinned ? ".on" : ""), {
+          textContent: "📌",
+          title: c.pinned ? t("取消置顶") : t("置顶"),
+        });
+        pin.onclick = async () => { if (await pinCategory(c.id, !c.pinned)) renderList(); };
+        const up = $el("button.asm-mini", { textContent: "↑", title: t("上移") });
+        up.disabled = at <= 0;
+        up.onclick = async () => { if (await moveCategory(c.id, "up")) renderList(); };
+        const down = $el("button.asm-mini", { textContent: "↓", title: t("下移") });
+        down.disabled = at < 0 || at >= peers.length - 1;
+        down.onclick = async () => { if (await moveCategory(c.id, "down")) renderList(); };
+
         const kids = [];
         if (!isChild) {
           const add = $el("button.asm-mini", { textContent: "＋", title: t("新建子分类") });
@@ -1165,8 +1236,11 @@ app.registerExtension({
           kids.push(add);
         }
         list.appendChild($el("div.asm-catrow.manage" + (isChild ? ".child" : ""), {}, [
+          pin,
           $el("span.catname", { textContent: c.name }),
           $el("span.catcount", { textContent: countOf(c.id) + t(" 项") }),
+          up,
+          down,
           ...kids,
           rename,
           del,
