@@ -285,10 +285,11 @@ def check_comfyignore():
         check(False, "存在 .comfyignore", "缺失")
         return
     body = read(p)
-    need = ["tests/", "assets/screenshots/"]
+    need = ["tests/", "tools/", "assets/screenshots/", ".github/"]
     missing = [n for n in need if n not in body]
     check(not missing, ".comfyignore 排除开发文件",
-          "缺: %s" % ", ".join(missing) if missing else "tests/ 与 assets/screenshots/ 已排除")
+          "缺: %s" % ", ".join(missing) if missing
+          else "tests/ tools/ assets/screenshots/ .github/ 已排除")
 
 
 # ---------------------------------------------------------------------------
