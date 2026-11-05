@@ -9,8 +9,14 @@ on:
 
 jobs:
   policy:
-    name: Registry policy + tests
-    runs-on: ubuntu-latest
+    name: Registry policy + tests (${{ matrix.os }})
+    # 两边都跑: Linux 能测出软链/路径分隔符类问题, Windows 是插件的实际运行环境,
+    # 只跑一边就有一半的平台差异看不到。
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
 
