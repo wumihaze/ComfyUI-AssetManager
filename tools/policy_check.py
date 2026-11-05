@@ -11,6 +11,7 @@
 
 import argparse
 import ast
+import os
 import pathlib
 import re
 import subprocess
@@ -22,6 +23,27 @@ PY_FILES = [p for p in ROOT.rglob("*.py")
 JS_FILES = list((ROOT / "web").rglob("*.js"))
 
 results = []   # (ok, 标题, 详情)
+
+
+def configure_stdio():
+    """控制台编码装不下中文时切到 UTF-8。
+
+    Windows 的 CI runner 默认编码是 cp1252, `print("发版前自检 ✔ …")` 会直接
+    UnicodeEncodeError, 整个检查还没开始就退出码 1。GitHub 的日志本身是 UTF-8,
+    切过去反而显示正常; 编码本来就够用(utf-8/gbk)时不动。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        enc = getattr(stream, "encoding", None) or "ascii"
+        try:
+            "发版前自检 ✔ ✘".encode(enc)
+        except (UnicodeEncodeError, LookupError):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
+configure_stdio()
 
 
 def check(ok, title, detail=""):
@@ -272,11 +294,23 @@ def check_comfyignore():
 # ---------------------------------------------------------------------------
 # 9. 单元测试
 # ---------------------------------------------------------------------------
+def run_child(args):
+    """跑子进程并按 UTF-8 编解码。
+
+    Windows 上子进程写管道时用的是本地编码(cp1252), 里面只要有中文就会崩在
+    print 上; 父进程按同样编码解码也会花掉。两边都钉死 UTF-8。
+    """
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    r = subprocess.run(args, cwd=str(ROOT), capture_output=True, env=env)
+    out = (r.stdout or b"").decode("utf-8", "replace")
+    err = (r.stderr or b"").decode("utf-8", "replace")
+    return r.returncode, out, err
+
+
 def run_tests():
-    r = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests"],
-                       cwd=str(ROOT), capture_output=True, text=True)
-    out = (r.stderr or "") + (r.stdout or "")
-    if r.returncode == 0:
+    code, out, err = run_child([sys.executable, "-m", "unittest", "discover", "-s", "tests"])
+    out = err + out
+    if code == 0:
         tail = out.strip().splitlines()
         check(True, "单元测试全过", tail[-1] if tail else "(无输出)")
         return
@@ -293,11 +327,10 @@ def run_http_smoke():
     except ImportError:
         check(True, "HTTP 冒烟(已跳过)", "本机没有 aiohttp; ComfyUI 环境里会跑")
         return
-    r = subprocess.run([sys.executable, str(ROOT / "tests" / "http_smoke.py")],
-                       cwd=str(ROOT), capture_output=True, text=True)
-    out = (r.stdout or "").strip().splitlines()
+    code, out, _err = run_child([sys.executable, str(ROOT / "tests" / "http_smoke.py")])
+    out = out.strip().splitlines()
     summary = out[-1] if out else ""
-    check(r.returncode == 0, "HTTP 冒烟全过", summary or "(无输出)")
+    check(code == 0, "HTTP 冒烟全过", summary or "(无输出)")
 
 
 def main():
