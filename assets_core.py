@@ -220,7 +220,9 @@ def load_categories(archive_dir):
         ordered.append(root)
         ordered.extend(sorted(kids.get(root["id"], []), key=_order_key))
     _renumber(ordered)
-    return {"categories": ordered[:CATEGORY_LIMIT]}
+    # 注意: 这里不做截断。以前按 CATEGORY_LIMIT 截断, 一旦 categories.json 被手工改到
+    # 超过上限, 后续任何一次 save 都会把多出来的分类**静默删掉**。上限只在新建时拦。
+    return {"categories": ordered}
 
 
 def save_categories(archive_dir, data):
@@ -309,12 +311,13 @@ def move_category(archive_dir, category_id, direction):
 
 def set_category_pinned(archive_dir, category_id, pinned):
     """置顶/取消置顶。置顶后落到同层置顶区最前, 取消后落到未置顶区最后。"""
+    if not isinstance(pinned, bool):
+        return {"ok": False, "error": "pinned must be a boolean"}
     data = load_categories(archive_dir)
     items = data["categories"]
     target = next((c for c in items if c["id"] == category_id), None)
     if target is None:
         return {"ok": False, "error": "Category not found"}
-    pinned = bool(pinned)
     if bool(target.get("pinned")) == pinned:
         return {"ok": True, "pinned": pinned, "categories": items}
     target["pinned"] = pinned
@@ -747,9 +750,16 @@ def _merge_moved_file(arch, prev_rel, rel, src, st, state, source_root):
     """
     if not isinstance(prev_rel, str) or not prev_rel:
         return None
-    run_dir = Path(arch) / prev_rel
+    # prev_rel 是从 state 文件里读出来的(用户/别的进程可写), 必须是规规矩矩的
+    # "日期/任务" 两级相对路径, 且解析后仍在归档目录内 —— 否则可能被指去改写任意 info.json。
+    parts = prev_rel.replace(chr(92), "/").split("/")
+    if len(parts) != 2 or any(p in ("", ".", "..") for p in parts):
+        return None
+    run_dir = Path(arch) / parts[0] / parts[1]
+    if run_dir.is_symlink() or not run_dir.is_dir() or not path_is_within(run_dir, arch):
+        return None
     info_file = run_dir / "info.json"
-    if not info_file.is_file():
+    if info_file.is_symlink() or not info_file.is_file():
         return None
     try:
         info = json.loads(info_file.read_text(encoding="utf-8"))
@@ -780,6 +790,14 @@ def _merge_moved_file(arch, prev_rel, rel, src, st, state, source_root):
         state.pop(old_rel, None)
     state[rel] = {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
     return {"merged": True, "dir": prev_rel, "source_rel": rel}
+
+
+def _discard_dir(path):
+    """归档写到一半失败时清掉半成品目录, 免得留下没有 info.json 的空壳。"""
+    try:
+        shutil.rmtree(path)
+    except OSError:
+        pass
 
 
 def archive_file(rel, src, archive_dir, state, cfg, prompt_resolver=None, source_root=None):
@@ -867,10 +885,19 @@ def archive_file(rel, src, archive_dir, state, cfg, prompt_resolver=None, source
     while run_dir.exists():
         run_dir = arch / date_folder / f"{run_id}_{n}"
         n += 1
-    run_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        run_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # 归档目录不可写, 或日期位置被一个同名文件占住了: 跳过这个文件,
+        # 不要让整个扫描因为一条记录而中断。
+        return None
 
     media_name = Path(rel).name
-    shutil.copy2(src, run_dir / media_name)
+    try:
+        shutil.copy2(src, run_dir / media_name)
+    except OSError:
+        _discard_dir(run_dir)
+        return None
 
     thumb = None
     if kind == "image" and HAS_PIL:
@@ -910,10 +937,6 @@ def archive_file(rel, src, archive_dir, state, cfg, prompt_resolver=None, source
     }
     if content_hash:
         info["content_hash"] = content_hash
-    (run_dir / "info.json").write_text(
-        json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
-    if content_hash:
-        _content_index(state)[content_hash] = run_dir.relative_to(arch).as_posix()
 
     lines = ["=== ComfyUI 产物信息 ===",
              f"来源: {rel}", f"生成时间: {info['generated_at']}",
@@ -926,12 +949,20 @@ def archive_file(rel, src, archive_dir, state, cfg, prompt_resolver=None, source
     lines += ["", "=== 正向提示词 ===", parsed["positive"] or "(未检测到)"]
     if parsed["negative"]:
         lines += ["", "=== 负向提示词 ===", parsed["negative"]]
-    (run_dir / "prompt.txt").write_text("\n".join(lines), encoding="utf-8")
 
-    if workflow_graph:
-        (run_dir / "workflow.json").write_text(
-            json.dumps(workflow_graph, ensure_ascii=False, indent=1), encoding="utf-8")
+    try:
+        (run_dir / "info.json").write_text(
+            json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / "prompt.txt").write_text("\n".join(lines), encoding="utf-8")
+        if workflow_graph:
+            (run_dir / "workflow.json").write_text(
+                json.dumps(workflow_graph, ensure_ascii=False, indent=1), encoding="utf-8")
+    except OSError:
+        _discard_dir(run_dir)
+        return None
 
+    if content_hash:
+        _content_index(state)[content_hash] = run_dir.relative_to(arch).as_posix()
     state[rel] = state_key
     return {"run": run_dir.name, "dir": run_dir.relative_to(arch).as_posix(), "kind": kind}
 
@@ -1205,6 +1236,13 @@ def backup_assets(cfg, base_dir, workflow_dirs=None):
 
 def safe_media_path(archive_dir, rel, workflow_only=False):
     """Return only manifest-listed files from an archive run."""
+    # 先按字面形状卡死: 必须是 <日期>/<任务>/<文件名> 三段, 且不允许 . / .. 和空段。
+    # 这样就不用依赖 resolve() 去"消化"穿越段, 语义也更清楚。
+    if not isinstance(rel, str) or not rel or len(rel) > 1024:
+        return None
+    raw_parts = rel.replace(chr(92), "/").split("/")
+    if len(raw_parts) != 3 or any(x in ("", ".", "..") for x in raw_parts):
+        return None
     arch = Path(archive_dir).resolve()
     try:
         p = (arch / rel).resolve(strict=True)

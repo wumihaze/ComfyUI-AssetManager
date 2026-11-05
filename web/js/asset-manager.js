@@ -330,6 +330,11 @@ app.registerExtension({
       "Category name is required": "分类名不能为空",
       "Too many categories": "分类数量已达上限",
       "Unknown action": "未知操作",
+      "Invalid direction": "方向不合法",
+      "Category operation failed": "分类操作失败（归档目录可能不可写）",
+      "Assign failed": "移动分类失败（归档目录可能不可写）",
+      "Only one level of nesting is supported": "只支持一层子分类",
+      "Parent category not found": "父分类不存在",
     };
     function terr(en) { return LANG === "zh" ? (ERR_L10N[en] || en) : en; }
     detectLang();

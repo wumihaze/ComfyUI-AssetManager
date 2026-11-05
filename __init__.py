@@ -7,11 +7,13 @@ ComfyUI 资产管理插件
 """
 
 import asyncio
+import functools
 import mimetypes
 import os
 import sys
 import tempfile
 import threading
+import urllib.parse
 
 # 保证能 import 同目录的核心库
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -119,6 +121,40 @@ from server import PromptServer  # noqa: E402
 from aiohttp import web  # noqa: E402
 
 
+def _is_cross_origin(request):
+    """跨站写请求判定。
+
+    ComfyUI 默认只监听回环, 但浏览器允许任意网页向 127.0.0.1 发"简单请求"
+    (text/plain 的表单/fetch), 不需要 CORS 预检就能打到这些写接口。浏览器对
+    跨站 POST 一定会带 Origin, 而页面脚本没法伪造它, 所以按 Origin 拦一道。
+
+    只拦真正的 http(s) 跨站来源: 没有 Origin(命令行/脚本)、`Origin: null`
+    (file:// 页面)或 app:// 之类的非 http 来源一律放行, 避免误伤桌面端和
+    反向代理场景。
+    """
+    origin = request.headers.get("Origin")
+    if not origin:
+        return False
+    try:
+        parsed = urllib.parse.urlparse(origin)
+    except ValueError:
+        return False
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return False
+    return parsed.netloc.lower() != (request.headers.get("Host") or "").lower()
+
+
+def _same_origin_only(handler):
+    """给写接口加一道跨站来源校验。"""
+    @functools.wraps(handler)
+    async def wrapper(request):
+        if _is_cross_origin(request):
+            return web.json_response(
+                {"ok": False, "error": "Cross-origin request rejected"}, status=403)
+        return await handler(request)
+    return wrapper
+
+
 @PromptServer.instance.routes.get("/asset/list")
 async def asset_list(request):
     runs = await asyncio.to_thread(assets_core.list_runs, _arch)
@@ -139,6 +175,7 @@ async def asset_config(request):
 
 
 @PromptServer.instance.routes.post("/asset/set_output_dir")
+@_same_origin_only
 async def asset_set_output_dir(request):
     try:
         body = await request.json()
@@ -170,6 +207,7 @@ async def asset_set_output_dir(request):
 
 
 @PromptServer.instance.routes.post("/asset/set_config")
+@_same_origin_only
 async def asset_set_config(request):
     """保存配置(在面板里修改所有设置)。
 
@@ -236,8 +274,9 @@ async def asset_set_config(request):
         if val:
             try:
                 os.makedirs(val, exist_ok=True)
-            except Exception as e:
-                errors.append(f"Cannot create {key}: {e}")
+            except Exception:
+                # 不回显异常文本(OSError 的 str() 里带绝对路径)
+                errors.append(f"Cannot create {key}")
                 updates.pop(key, None)
 
     # 3) 数值类: 必须为整数且在合法区间
@@ -278,6 +317,7 @@ async def asset_set_config(request):
 
 
 @PromptServer.instance.routes.post("/asset/delete")
+@_same_origin_only
 async def asset_delete(request):
     try:
         body = await request.json()
@@ -298,6 +338,7 @@ async def asset_delete(request):
 
 
 @PromptServer.instance.routes.post("/asset/delete_batch")
+@_same_origin_only
 async def asset_delete_batch(request):
     try:
         body = await request.json()
@@ -339,6 +380,7 @@ async def asset_categories(request):
 
 
 @PromptServer.instance.routes.post("/asset/category")
+@_same_origin_only
 async def asset_category(request):
     try:
         body = await request.json()
@@ -379,14 +421,16 @@ async def asset_category(request):
                         return {"ok": False, "error": "pinned must be a boolean"}
                     return assets_core.set_category_pinned(_arch, category_id, pinned)
                 return {"ok": False, "error": "Unknown action"}
-        except Exception as exc:  # 归档目录不可写/不存在时不要抛 500
-            return {"ok": False, "error": "Category operation failed: %s" % exc}
+        except Exception:  # 归档目录不可写/不存在时不要抛 500
+            # 不把异常文本回给前端: OSError 的 str() 里带绝对路径
+            return {"ok": False, "error": "Category operation failed"}
 
     result = await asyncio.to_thread(_go)
     return web.json_response(result)
 
 
 @PromptServer.instance.routes.post("/asset/assign")
+@_same_origin_only
 async def asset_assign(request):
     try:
         body = await request.json()
@@ -408,27 +452,35 @@ async def asset_assign(request):
         try:
             with _LOCK:
                 return assets_core.assign_category(_arch, run_ids, category)
-        except Exception as exc:  # 同上: 失败也返回结构化 JSON
-            return {"ok": False, "error": "Assign failed: %s" % exc}
+        except Exception:  # 同上: 失败也返回结构化 JSON
+            return {"ok": False, "error": "Assign failed"}
 
     result = await asyncio.to_thread(_go)
     return web.json_response(result)
 
 
 @PromptServer.instance.routes.post("/asset/scan")
+@_same_origin_only
 async def asset_scan(request):
     # 强制刷新一次服务端提示词索引: 刚跑完的任务要能立刻按文件名找回 prompt
     _hist.refresh(force=True)
 
     def _go():
-        with _LOCK:
-            return assets_core.scan_all(_current_output_dir(), _arch, _state, _cfg, _prompt_resolver)
+        try:
+            with _LOCK:
+                return assets_core.scan_all(_current_output_dir(), _arch, _state, _cfg, _prompt_resolver)
+        except Exception:
+            # 归档目录只读/占满/被同名文件挡住时返回结构化错误, 不要 500
+            return -1
 
     n = await asyncio.to_thread(_go)
+    if n < 0:
+        return web.json_response({"ok": False, "error": "Scan failed"}, status=200)
     return web.json_response({"ok": True, "new": n})
 
 
 @PromptServer.instance.routes.post("/asset/backup")
+@_same_origin_only
 async def asset_backup(request):
     def _go():
         wdirs = []
@@ -567,5 +619,6 @@ async def asset_browse_dir(request):
             parent = None
         dirs = _browse_children(path)
         return web.json_response({"ok": True, "path": path, "parent": parent, "dirs": dirs})
-    except Exception as e:
-        return web.json_response({"ok": False, "error": str(e)})
+    except Exception:
+        # 不回显异常文本: 目录枚举失败的 OSError 里带绝对路径
+        return web.json_response({"ok": False, "error": "Cannot read directory"})
