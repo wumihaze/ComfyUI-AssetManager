@@ -39,7 +39,9 @@ class DeployPathPortabilityTests(unittest.TestCase):
             plugin_dir = Path(td) / "ComfyUI" / "custom_nodes" / "ComfyUI-AssetManager"
             plugin_dir.mkdir(parents=True)
             archive_dir, backup_dir = assets_core.default_asset_dirs(str(plugin_dir))
-            comfy_root = Path(td) / "ComfyUI"
+            # 期望值也要 resolve: default_asset_dirs 内部 resolve 过, 而 Windows 的
+            # TEMP 可能带 8.3 短名(RUNNER~1), 长名和短名指向同一个目录但字符串不等。
+            comfy_root = (Path(td) / "ComfyUI").resolve()
             self.assertEqual(Path(archive_dir), comfy_root / "asset_archive")
             self.assertEqual(Path(backup_dir), comfy_root / "asset_backups")
             self.assertNotIn(":", Path(archive_dir).name)
