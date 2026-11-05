@@ -6,6 +6,7 @@ ComfyUI 资产管理插件核心库
 索引列表 / 删除 / 备份 / 媒体文件安全读取。
 """
 
+import hashlib
 import json
 import os
 import shutil
@@ -595,6 +596,83 @@ def make_video_thumb(src, dst, cfg):
     return None
 
 
+CONTENT_HASH_LIMIT = 64 * 1024 * 1024   # 超过这个大小的文件不做内容去重(避免每次归档都读一遍大视频)
+
+
+def file_content_hash(path, limit=CONTENT_HASH_LIMIT):
+    """文件内容指纹。太大或读不了时返回 None(退化成只按路径去重)。"""
+    try:
+        if os.path.getsize(path) > limit:
+            return None
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+def _content_index(state):
+    """可写的 内容哈希 → 归档目录 索引(按需创建)。"""
+    idx = state.get("__content__")
+    if not isinstance(idx, dict):
+        idx = {}
+        state["__content__"] = idx
+    return idx
+
+
+def _content_lookup(state, content_hash):
+    """只读查索引。命中不了就返回 None, 不往 state 里塞空壳。"""
+    idx = state.get("__content__")
+    if not isinstance(idx, dict) or not content_hash:
+        return None
+    hit = idx.get(content_hash)
+    return hit if isinstance(hit, str) and hit else None
+
+
+def _merge_moved_file(arch, prev_rel, rel, src, st, state, source_root):
+    """同一份内容换了路径(移动/改名): 更新原记录而不是再归档一份。
+
+    只有"旧路径上的文件已经不在了"才合并; 两份都还在说明用户是真的存了两份, 保持独立。
+    """
+    if not isinstance(prev_rel, str) or not prev_rel:
+        return None
+    run_dir = Path(arch) / prev_rel
+    info_file = run_dir / "info.json"
+    if not info_file.is_file():
+        return None
+    try:
+        info = json.loads(info_file.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(info, dict):
+        return None
+    old_rel = info.get("source_rel")
+    if isinstance(old_rel, str) and old_rel and source_root is not None:
+        try:
+            old_src = Path(source_root) / old_rel
+            if old_src.is_file() and not old_src.is_symlink():
+                return None      # 旧文件还在 → 真的是两份, 不合并
+        except OSError:
+            pass
+    info["source_rel"] = rel
+    info["folder"] = resolve_folder({"source_rel": rel})
+    info["file_size"] = st.st_size
+    info["generated_at"] = datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds")
+    info["moved_at"] = datetime.now().isoformat(timespec="seconds")
+    tmp = info_file.with_suffix(".json.tmp")
+    try:
+        tmp.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, info_file)
+    except OSError:
+        return None
+    if isinstance(old_rel, str) and old_rel and old_rel != rel:
+        state.pop(old_rel, None)
+    state[rel] = {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
+    return {"merged": True, "dir": prev_rel, "source_rel": rel}
+
+
 def archive_file(rel, src, archive_dir, state, cfg, prompt_resolver=None, source_root=None):
     src = Path(src)
     try:
@@ -622,6 +700,14 @@ def archive_file(rel, src, archive_dir, state, cfg, prompt_resolver=None, source
         return None
     arch = Path(archive_dir)
     media_duration = None
+
+    # 内容没变、只是路径变了(用户在资源管理器里挪动/改名) → 复用已有记录
+    content_hash = file_content_hash(src)
+    if content_hash:
+        merged = _merge_moved_file(arch, _content_lookup(state, content_hash),
+                                   rel, src, st, state, source_root)
+        if merged:
+            return merged
 
     if kind == "image":
         prompt_raw, workflow_raw = extract_image_metadata(src)
@@ -713,8 +799,12 @@ def archive_file(rel, src, archive_dir, state, cfg, prompt_resolver=None, source
         "prompt_source": prompt_source,
         "no_prompt_reason": no_prompt_reason,
     }
+    if content_hash:
+        info["content_hash"] = content_hash
     (run_dir / "info.json").write_text(
         json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+    if content_hash:
+        _content_index(state)[content_hash] = run_dir.relative_to(arch).as_posix()
 
     lines = ["=== ComfyUI 产物信息 ===",
              f"来源: {rel}", f"生成时间: {info['generated_at']}",
@@ -791,12 +881,16 @@ def scan_all(output_dir, archive_dir, state, cfg, prompt_resolver=None):
             if rel in state:
                 # 已记录过(归档过或基线过), 文件有变化 → 归档新版本
                 r = archive_file(rel, src, archive_dir, state, cfg, prompt_resolver, source_root=out)
-                if r:
+                if r and r.get("merged"):
+                    state_changed = True
+                elif r:
                     new_runs.append(r)
             elif baseline_done or archive_existing:
                 # 基线已建立后的新文件, 或用户开启"归档历史" → 归档
                 r = archive_file(rel, src, archive_dir, state, cfg, prompt_resolver, source_root=out)
-                if r:
+                if r and r.get("merged"):
+                    state_changed = True
+                elif r:
                     new_runs.append(r)
             else:
                 # 首次扫描且不归档历史: 只记录基线(不复制文件)
@@ -901,6 +995,12 @@ def delete_run(archive_dir, output_dir, state, run_id):
     except Exception:
         pass
     shutil.rmtree(run_dir)
+    # 记录没了, 内容索引里指向它的条目也一起清掉(否则以后同内容会被指向空目录)
+    rel_dir = run_dir.relative_to(arch).as_posix()
+    idx = state.get("__content__")
+    if isinstance(idx, dict):
+        for h in [k for k, v in idx.items() if v == rel_dir]:
+            idx.pop(h, None)
     if source_rel and out:
         src = out / source_rel
         # Never follow a source symlink during deletion, and keep the resolved target under output.

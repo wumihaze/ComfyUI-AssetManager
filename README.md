@@ -20,6 +20,8 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image, video,
   **批量删除** — 多选（Ctrl/Shift 点选，或在空白处拖框）后一键从硬盘删除（归档副本 + output 原始文件），单个删除也可。
 - **Live refresh** — the panel auto-syncs every 8 seconds; files manually copied into the output directory get archived, and manual deletions disappear automatically.<br>
   **实时刷新** — 面板每 8 秒自动同步，手动复制进输出目录的文件也会被归档、手动删除也会自动消失。
+- **Content-fingerprint dedup** — every archived file is SHA-256 fingerprinted. When you **move or rename** a file in the output directory, the existing archive record is updated in place (source path, folder, category all preserved) instead of creating a second copy — so tidying up `output/` in Explorer no longer duplicates your library. Genuinely different files, and cases where **both** copies still exist, stay as separate records. Files over 64 MB skip the fingerprint and fall back to path-based tracking.<br>
+  **内容指纹去重** — 每个归档文件都会算 SHA-256 指纹。在 output 里**移动或改名**文件时，原归档记录会被就地更新（来源路径、文件夹、分类全部保留），不会再归档出第二份——在资源管理器里整理 `output/` 不会再让资产库翻倍。内容真的不同、或者**两份都还在**的情况仍各自独立成记录。超过 64 MB 的文件跳过指纹，退化成按路径追踪。
 - **Output directory switching** — change the output directory in settings; new assets save there instantly and it's **restored automatically after ComfyUI restarts**.<br>
   **输出目录切换** — 设置里改输出目录，新产物即时改存；**重启 ComfyUI 后自动恢复**。
 - **Directory picker** — the output/archive/backup fields each have a "Browse…" button; pick a folder with the mouse, no manual path typing.<br>
@@ -35,6 +37,8 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image, video,
   批量删除 + 实时扫描刷新（手动拖入/删除文件也会同步）
 - Output directory switching, auto-restored after restart<br>
   输出目录切换且重启自动恢复
+- Content-fingerprint dedup — tidying up `output/` never duplicates the library<br>
+  内容指纹去重，整理 `output/` 不会让资产库重复
 - Directory picker — no absolute path typing required<br>
   目录浏览器点选，不依赖手输绝对路径
 
@@ -129,7 +133,8 @@ machine), the plugin falls back to the defaults and reports the reason via `warn
 
 ```
 <archive dir>/
-├─ categories.json              # your categories (flat list) / 自建分类清单
+├─ categories.json              # your category tree / 自建分类树（支持一层子分类）
+├─ archive_state.json           # scan state + content-fingerprint index / 扫描状态 + 内容指纹索引
 └─ 2026-08-12/
    └─ 110358_ComfyUI_00016/
       ├─ ComfyUI_00016_.png       # original asset / 原产物
@@ -139,10 +144,10 @@ machine), the plugin falls back to the defaults and reports the reason via `warn
       └─ thumb.jpg                # thumbnail (first frame for videos) / 缩略图(视频取首帧)
 ```
 
-`info.json` also carries `folder` (source subdirectory, auto-derived) and `category` (id of your category, or `null`).
+`info.json` also carries `folder` (source subdirectory, auto-derived), `category` (id of your category, or `null`), and — for files under 64 MB — `content_hash` (SHA-256 of the file, used to detect moves/renames).
 Older records without these fields are derived on the fly from `source_rel`, so no migration is needed.<br>
-`info.json` 还记录 `folder`（来源子目录，自动派生）与 `category`（自建分类 id，未分类为 `null`）。
-老记录缺少这两个字段时由 `source_rel` 即时派生，无需迁移。
+`info.json` 还记录 `folder`（来源子目录，自动派生）、`category`（自建分类 id，未分类为 `null`），以及 64 MB 以内文件的 `content_hash`（文件 SHA-256，用于识别移动/改名）。
+老记录缺少这些字段时由 `source_rel` 即时派生，无需迁移。
 
 ## 📝 Notes · 说明
 
