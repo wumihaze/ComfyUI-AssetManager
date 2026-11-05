@@ -19,8 +19,10 @@ const STYLE = `
 .asm-main { display:flex; flex:1; min-height:0; }
 .asm-side { width:172px; flex:0 0 172px; border-right:1px solid var(--border-color,#444); display:flex; flex-direction:column; min-height:0; }
 .asm-side .sec { display:flex; flex-direction:column; min-height:0; }
-.asm-side .sec.folders { flex:1 1 auto; }
-.asm-side .sec.cats { flex:0 0 auto; max-height:46%; border-top:1px solid var(--border-color,#444); }
+/* 我的分类在上: 高度跟着内容走(上限 54%), 条目少时紧凑, 多了自己滚 */
+.asm-side .sec.cats { flex:0 0 auto; max-height:54%; border-bottom:1px solid var(--border-color,#444); background:rgba(91,140,255,.035); }
+/* 来源文件夹在下: flex-basis 0 才不会被自身内容撑开, 只吃剩余高度, 自己滚 */
+.asm-side .sec.folders { flex:1 1 0; min-height:110px; }
 .asm-side .list { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; padding:0 6px 8px; display:flex; flex-direction:column; gap:1px; }
 .asm-side .grp { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:.6px; color:var(--descrip-text,#8a8a8a); padding:9px 8px 5px; }
 .asm-side .grp .sp { flex:1; }
@@ -42,6 +44,26 @@ const STYLE = `
 .asm-catrow:hover { border-color:#5b8cff; }
 .asm-newcat { display:flex; gap:8px; align-items:center; }
 .asm-newcat input { flex:1; min-width:120px; }
+/* 框选 */
+.asm-marquee { position:fixed; z-index:10002; display:none; pointer-events:none; border:1px solid #5b8cff; background:rgba(91,140,255,.16); border-radius:3px; }
+/* 移到分类: 目标选择 */
+.asm-assign-hint { font-size:12px; color:var(--descrip-text,#aaa); margin:-2px 0 12px; line-height:1.7; }
+.asm-assign-hint b { color:var(--fg-color,#eee); font-weight:600; }
+.asm-catlist.pick { gap:2px; margin:0; max-height:46vh; padding:2px 0; }
+.asm-pickrow { display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:none; border:1px solid transparent; color:var(--fg-color,#eee); border-radius:8px; padding:9px 10px; font-size:13px; cursor:pointer; }
+.asm-pickrow:hover { background:rgba(91,140,255,.14); border-color:rgba(91,140,255,.45); }
+.asm-pickrow .dot { flex:0 0 auto; width:15px; height:15px; border-radius:50%; border:1.5px solid #666; position:relative; }
+.asm-pickrow:hover .dot { border-color:#5b8cff; }
+.asm-pickrow.cur .dot { border-color:#5b8cff; }
+.asm-pickrow.cur .dot::after { content:""; position:absolute; inset:2.5px; border-radius:50%; background:#5b8cff; }
+.asm-pickrow .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.asm-pickrow .n { flex:0 0 auto; font-size:11px; color:var(--descrip-text,#8a8a8a); }
+.asm-pickrow .tag { flex:0 0 auto; font-size:10px; color:#8fb0ff; background:rgba(91,140,255,.18); border-radius:9px; padding:1px 7px; }
+.asm-pickrow.out { color:var(--descrip-text,#bbb); }
+.asm-pickrow.out .dot { border-style:dashed; }
+.asm-sep { display:flex; align-items:center; gap:10px; margin:12px 0 10px; font-size:11px; color:var(--descrip-text,#8a8a8a); }
+.asm-sep::before, .asm-sep::after { content:""; flex:1; height:1px; background:var(--border-color,#3a3a3a); }
+.asm-modal-foot { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
 .asm-catrow.manage { display:flex; align-items:center; gap:8px; cursor:default; }
 .asm-catrow .catname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .asm-catrow .catcount { font-size:11px; color:var(--descrip-text,#aaa); }
@@ -163,6 +185,16 @@ app.registerExtension({
       "新建分类名称": "New category name",
       "新建并移入": "Create and move",
       "移动失败": "Move failed",
+      "已选 ": "Selected ",
+      "当前：": "Current: ",
+      "当前": "current",
+      "多个分类": "Multiple categories",
+      "搜索分类…": "Search categories…",
+      "或": "or",
+      "或新建一个分类": "or create a new category",
+      "多选：单击切换 / Ctrl 单击加选 / Shift 单击连选 / 空白处拖拽框选":
+        "Multi-select: click to toggle / Ctrl+click to add / Shift+click for a range / drag on empty space to box-select",
+      "已退出多选": "Multi-select off",
       "新建失败": "Create failed",
       "⚙ 管理分类": "⚙ Categories",
       "管理分类": "Manage categories",
@@ -472,21 +504,7 @@ app.registerExtension({
       if (folderFilter !== null && !fcounts.has(folderFilter)) folderFilter = null;
       if (catFilter && catFilter !== "__none__" && !categories.some(c => c.id === catFilter)) catFilter = "";
 
-      // 上段: 来源文件夹(条目多, 自己滚)
-      const fList = $el("div.list");
-      fList.appendChild(sideItem(t("全部文件夹"), runs.length, folderFilter === null, "f", null,
-        () => { folderFilter = null; refresh(); }));
-      const entries = [...fcounts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-      for (const [f, n] of entries) {
-        fList.appendChild(sideItem(f || t("（根目录）"), n, folderFilter === f, "f", f,
-          () => { folderFilter = f; refresh(); }));
-      }
-      side.appendChild($el("div.sec.folders", {}, [
-        $el("div.grp", {}, [$el("span", { textContent: t("来源文件夹") })]),
-        fList,
-      ]));
-
-      // 下段: 我的分类(常驻底部, 不会被文件夹列表挤走)
+      // 上段: 我的分类(手动建的, 条目少 → 高度跟着内容自适应, 多了才滚动)
       let uncat = 0;
       const ccounts = new Map();
       for (const r of runs) {
@@ -515,6 +533,20 @@ app.registerExtension({
         ]),
         cList,
       ]));
+
+      // 下段: 来源文件夹(自动派生, 条目多 → 占满剩余高度, 自己滚)
+      const fList = $el("div.list");
+      fList.appendChild(sideItem(t("全部文件夹"), runs.length, folderFilter === null, "f", null,
+        () => { folderFilter = null; refresh(); }));
+      const entries = [...fcounts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+      for (const [f, n] of entries) {
+        fList.appendChild(sideItem(f || t("（根目录）"), n, folderFilter === f, "f", f,
+          () => { folderFilter = f; refresh(); }));
+      }
+      side.appendChild($el("div.sec.folders", {}, [
+        $el("div.grp", {}, [$el("span", { textContent: t("来源文件夹") })]),
+        fList,
+      ]));
     }
 
     relabelers.push(renderSide);
@@ -539,6 +571,7 @@ app.registerExtension({
     // ---------- 渲染 ----------
     function renderCard(r, container) {
       const card = $el("div.asm-card");
+      card.dataset.dir = r.dir;
       if (selected.has(r.dir)) card.classList.add("selected");
       const thumb = r.thumb ? mediaUrl(r.dir, r.thumb) : mediaUrl(r.dir, r.media);
       const isVid = r.kind === "video";
@@ -561,21 +594,159 @@ app.registerExtension({
         $el("div.pr", { textContent: (r.positive || "").slice(0, 160) || t("(未检测到提示词)") }),
         r.models && r.models.length ? $el("div.mo", { textContent: r.models.join(" · ") }) : null,
       ].filter(Boolean)));
-      card.onclick = () => {
-        if (multi) {
+      card.onclick = (ev) => {
+        // 刚做完框选: 拖拽结束时浏览器还会补一个 click, 这里吞掉
+        if (Date.now() < suppressClickUntil) return;
+        const additive = ev.ctrlKey || ev.metaKey;
+        const ranged = ev.shiftKey;
+        // Ctrl / Shift 直接进入多选, 不必先点"☑ 多选"
+        if ((additive || ranged) && !multi) setMulti(true);
+        if (!multi) { openPreview(r); return; }
+
+        if (ranged) {
+          if (anchorDir) selectRange(anchorDir, r.dir);
+          else { selected.add(r.dir); anchorDir = r.dir; }
+        } else if (additive) {
           if (selected.has(r.dir)) selected.delete(r.dir); else selected.add(r.dir);
-          card.classList.toggle("selected", selected.has(r.dir));
-          const m = card.querySelector(".m");
-          const mark = card.querySelector(".selmark");
-          if (selected.has(r.dir) && !mark) m.appendChild($el("div.selmark", { textContent: "✓" }));
-          if (!selected.has(r.dir) && mark) mark.remove();
-          updateBatchBtn();
+          anchorDir = r.dir;
         } else {
-          openPreview(r);
+          // 普通单击: 切换, 并把连选锚点挪到这张
+          if (selected.has(r.dir)) selected.delete(r.dir); else selected.add(r.dir);
+          anchorDir = r.dir;
         }
+        syncCardSelection();
+        updateBatchBtn();
       };
       container.appendChild(card);
     }
+
+    // ---------- 多选: 单击切换 / Ctrl 加选 / Shift 连选 / 空白处拖拽框选 ----------
+    let anchorDir = null;          // Shift 连选的锚点
+    let suppressClickUntil = 0;    // 框选后短暂屏蔽 click
+
+    function setMulti(on) {
+      multi = on;
+      multiBtn.classList.toggle("on", multi);
+      if (!multi) { selected.clear(); anchorDir = null; }
+      updateBatchBtn();
+      refresh();
+    }
+
+    // 把 selected 的状态刷到当前可见卡片上(不重建 DOM)
+    function syncCardSelection() {
+      for (const card of overlay.querySelectorAll(".asm-card")) {
+        const on = selected.has(card.dataset.dir);
+        card.classList.toggle("selected", on);
+        const m = card.querySelector(".m");
+        const mark = card.querySelector(".selmark");
+        if (on && m && !mark) m.appendChild($el("div.selmark", { textContent: "✓" }));
+        if (!on && mark) mark.remove();
+      }
+    }
+
+    function visibleCards() {
+      const box = view === "grid" ? gridEl : calListCards;
+      return [...box.querySelectorAll(".asm-card")];
+    }
+
+    // 从 fromDir 到 toDir 按当前显示顺序整段选中
+    function selectRange(fromDir, toDir) {
+      const list = visibleCards();
+      const i = list.findIndex(c => c.dataset.dir === fromDir);
+      const j = list.findIndex(c => c.dataset.dir === toDir);
+      if (i < 0 || j < 0) { selected.add(toDir); return; }
+      const [a, b] = i <= j ? [i, j] : [j, i];
+      for (let k = a; k <= b; k++) selected.add(list[k].dataset.dir);
+    }
+
+    // 框选: 在空白处按下并拖动, 与选框相交的卡片即被选中
+    const marquee = $el("div.asm-marquee");
+    let dragBox = null;
+    let autoScrollTimer = null;
+
+    function beginMarquee(ev) {
+      if (ev.button !== 0) return;
+      // 只在卡片容器的空白处起手(卡片本身有自己的点击逻辑)
+      if (ev.target.closest(".asm-card")) return;
+      if (!ev.target.closest(".asm-grid, .asm-callist .cards")) return;
+      ev.preventDefault();
+      // 按住 Ctrl/Shift 框选是追加, 否则先清空
+      const base = (ev.ctrlKey || ev.metaKey || ev.shiftKey) ? new Set(selected) : new Set();
+      dragBox = { x0: ev.clientX, y0: ev.clientY, base, moved: false };
+      lastDragX = ev.clientX; lastDragY = ev.clientY;
+      marquee.style.display = "block";
+      marquee.style.left = ev.clientX + "px";
+      marquee.style.top = ev.clientY + "px";
+      marquee.style.width = "0px";
+      marquee.style.height = "0px";
+      overlay.appendChild(marquee);
+      window.addEventListener("mousemove", trackPointer);
+      window.addEventListener("mousemove", moveMarquee);
+      window.addEventListener("mouseup", endMarquee, { once: true });
+      startAutoScroll();
+    }
+
+    function trackPointer(ev) { lastDragX = ev.clientX; lastDragY = ev.clientY; }
+
+    function moveMarquee(ev) {
+      if (!dragBox) return;
+      const x = Math.min(dragBox.x0, ev.clientX);
+      const y = Math.min(dragBox.y0, ev.clientY);
+      const w = Math.abs(ev.clientX - dragBox.x0);
+      const h = Math.abs(ev.clientY - dragBox.y0);
+      if (w > 2 || h > 2) dragBox.moved = true;
+      // 真的拖起来了才切进多选(单纯点一下空白不该改变模式), 这里不 refresh, 免得拖拽中途重建卡片
+      if (dragBox.moved && !multi) {
+        multi = true;
+        multiBtn.classList.add("on");
+        anchorDir = null;
+      }
+      marquee.style.left = x + "px";
+      marquee.style.top = y + "px";
+      marquee.style.width = w + "px";
+      marquee.style.height = h + "px";
+
+      const next = new Set(dragBox.base);
+      for (const card of visibleCards()) {
+        const b = card.getBoundingClientRect();
+        if (b.left < x + w && b.right > x && b.top < y + h && b.bottom > y) next.add(card.dataset.dir);
+      }
+      selected.clear();
+      for (const d of next) selected.add(d);
+      syncCardSelection();
+      updateBatchBtn();
+    }
+
+    // 拖到可视区上下边缘时自动滚动
+    function startAutoScroll() {
+      stopAutoScroll();
+      autoScrollTimer = setInterval(() => {
+        if (!dragBox || !lastDragY) return;
+        const r = body.getBoundingClientRect();
+        if (lastDragY < r.top + 48) body.scrollTop -= 18;
+        else if (lastDragY > r.bottom - 48) body.scrollTop += 18;
+        else return;
+        moveMarquee({ clientX: lastDragX, clientY: lastDragY });
+      }, 40);
+    }
+    function stopAutoScroll() {
+      if (autoScrollTimer) { clearInterval(autoScrollTimer); autoScrollTimer = null; }
+    }
+    let lastDragX = 0, lastDragY = 0;
+
+    function endMarquee() {
+      window.removeEventListener("mousemove", trackPointer);
+      window.removeEventListener("mousemove", moveMarquee);
+      stopAutoScroll();
+      if (dragBox && dragBox.moved) suppressClickUntil = Date.now() + 300;
+      dragBox = null;
+      marquee.style.display = "none";
+      marquee.remove();
+      updateBatchBtn();
+    }
+
+    // 空白处按下即开始框选(卡片容器内的空白也算)
+    body.addEventListener("mousedown", beginMarquee);
 
     function renderGrid() {
       const list = filtered(runs);
@@ -669,11 +840,10 @@ app.registerExtension({
       }
     }
     function toggleMulti() {
-      multi = !multi;
-      multiBtn.classList.toggle("on", multi);
-      selected.clear();
-      updateBatchBtn();
-      refresh();
+      setMulti(!multi);
+      statusMsg(multi
+        ? t("多选：单击切换 / Ctrl 单击加选 / Shift 单击连选 / 空白处拖拽框选")
+        : t("已退出多选"));
     }
     async function batchDelete() {
       if (!selected.size) return;
@@ -711,40 +881,81 @@ app.registerExtension({
       for (const r of runs) if (moved.has(r.dir)) r.category = cid;
       renderSide();
       refresh();
+      const n = (d.updated || []).length;
       const skipped = (d.skipped || []).length;
-      statusMsg(
-        t("已移动 ") + (d.updated || []).length + t(" 项") +
-        (skipped ? (LANG === "zh" ? "（跳过 " + skipped + " 项）" : " (skipped " + skipped + ")") : "")
-      );
+      const target = cid ? ((categories.find(c => c.id === cid) || {}).name || t("分类")) : t("未分类");
+      const skipTxt = skipped ? (LANG === "zh" ? "（跳过 " + skipped + " 项）" : " (skipped " + skipped + ")") : "";
+      statusMsg(LANG === "zh"
+        ? ("已把 " + n + " 项移到「" + target + "」" + skipTxt)
+        : ("Moved " + n + " item(s) to \"" + target + "\"" + skipTxt));
     }
 
     function openAssignModal() {
       if (!selected.size) return;
       const ids = [...selected];
+      const byDir = new Map(runs.map(r => [r.dir, r]));
+      // 选中项当前所属分类: 全在同一个就显示名字, 否则显示"多个分类"
+      const curSet = new Set(ids.map(d => (byDir.get(d) || {}).category || null));
+      const curId = curSet.size === 1 ? [...curSet][0] : undefined;
+      const curLabel = curId === undefined
+        ? t("多个分类")
+        : (curId ? ((categories.find(c => c.id === curId) || {}).name || t("分类")) : t("未分类"));
+
       const m = $el("div.asm-modal", { style: { display: "flex" } });
       m.appendChild($el("div.bk", { onclick: () => m.remove() }));
-      const pn = $el("div.pn", { style: { width: "min(520px,92vw)" } });
+      const pn = $el("div.pn", { style: { width: "min(460px,92vw)" } });
       pn.appendChild($el("button.x", { textContent: "✕", onclick: () => m.remove() }));
-      pn.appendChild($el("h3", { textContent: t("移到分类") + " · " + ids.length + t(" 项") }));
+      pn.appendChild($el("h3", { textContent: t("移到分类") }));
 
-      const list = $el("div.asm-catlist");
-      function mkRow(label, cid) {
-        const b = $el("button.asm-catrow", { textContent: label });
+      const hint = $el("div.asm-assign-hint");
+      hint.appendChild(document.createTextNode(t("已选 ") + ids.length + t(" 项") + " · " + t("当前：")));
+      hint.appendChild($el("b", { textContent: curLabel }));
+      pn.appendChild(hint);
+
+      // 分类多时给个搜索框, 免得在长列表里翻
+      const search = $el("input.asm-search", { type: "text" });
+      search.placeholder = t("搜索分类…");
+      search.style.cssText = "width:100%;margin-bottom:8px;display:" + (categories.length > 6 ? "block" : "none");
+      pn.appendChild(search);
+
+      const list = $el("div.asm-catlist.pick");
+      const rows = [];
+      function pickRow(label, cid, count, cls) {
+        const isCur = cid === curId;
+        const b = $el("button.asm-pickrow" + (isCur ? ".cur" : "") + (cls ? "." + cls : ""));
+        b.appendChild($el("span.dot"));
+        b.appendChild($el("span.nm", { textContent: label, title: label }));
+        if (isCur) b.appendChild($el("span.tag", { textContent: t("当前") }));
+        if (count !== null) b.appendChild($el("span.n", { textContent: String(count) }));
+        b.dataset.kw = label.toLowerCase();
         b.onclick = async () => { m.remove(); await assignTo(ids, cid); };
+        rows.push(b);
         return b;
       }
-      list.appendChild(mkRow(t("未分类（移出分类）"), null));
-      for (const c of categories) list.appendChild(mkRow(c.name, c.id));
+
+      const ccounts = new Map();
+      for (const r of runs) if (r.category) ccounts.set(r.category, (ccounts.get(r.category) || 0) + 1);
+      for (const c of categories) list.appendChild(pickRow(c.name, c.id, ccounts.get(c.id) || 0));
       if (!categories.length) {
-        list.appendChild($el("div", {
-          style: { fontSize: "12px", color: "var(--descrip-text,#aaa)" },
-          textContent: t("还没有分类，在下面新建一个"),
-        }));
+        list.appendChild($el("div.empty", { textContent: t("还没有分类，在下面新建一个") }));
       }
       pn.appendChild(list);
 
+      // 移出分类单独一条: 它不是"选一个分类", 视觉上和上面区分开
+      pn.appendChild($el("div.asm-sep", { textContent: t("或") }));
+      const outRow = pickRow(t("未分类（移出分类）"), null, null, "out");
+      pn.appendChild(outRow);
+
+      search.oninput = () => {
+        const kw = search.value.trim().toLowerCase();
+        for (const r of rows) r.style.display = (!kw || r.dataset.kw.includes(kw)) ? "" : "none";
+      };
+
+      pn.appendChild($el("div.asm-sep", { textContent: t("或新建一个分类") }));
       const input = $el("input.asm-search", { type: "text" });
       input.placeholder = t("新建分类名称");
+      input.style.flex = "1";
+      input.style.minWidth = "120px";
       const createBtn = $el("button.asm-btn.primary");
       bindText(createBtn, "新建并移入");
       createBtn.onclick = async () => {
@@ -763,8 +974,12 @@ app.registerExtension({
       };
       input.addEventListener("keydown", (e) => { if (e.key === "Enter") createBtn.click(); });
       pn.appendChild($el("div.asm-newcat", {}, [input, createBtn]));
+      pn.appendChild($el("div.asm-modal-foot", {}, [
+        $el("button.asm-mini", { textContent: t("取消"), onclick: () => m.remove() }),
+      ]));
       m.appendChild(pn);
       document.body.appendChild(m);
+      setTimeout(() => input.focus(), 30);
     }
 
     // ---------- 分类管理: 新建 / 重命名 / 删除 ----------

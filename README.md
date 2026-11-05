@@ -16,8 +16,8 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image, video,
   **文件夹与分类浏览** — 日期分组保留，在此基础上多两个查找维度：**来源文件夹**（按 output 子目录自动派生，零操作，历史归档立刻可用）与**自建分类**（自己建，多选后移入）。移动只改归档元数据，不动原始文件、不动归档目录结构，毫秒级且可逆。
 - **Preview & reproduce** — view full-size images, play videos and audio, copy prompt, download `workflow.json` (drag it back onto the canvas to restore the whole workflow).<br>
   **预览与复现** — 查看大图、播放视频和音频、复制提示词、下载 workflow.json（拖回画布还原整套工作流）。
-- **Batch delete** — multi-select and delete from disk in one click (archive copy + original output file); single delete too.<br>
-  **批量删除** — 多选勾选后一键从硬盘删除（归档副本 + output 原始文件），单个删除也可。
+- **Batch delete** — multi-select (Ctrl/Shift click or drag a box on empty space) and delete from disk in one click (archive copy + original output file); single delete too.<br>
+  **批量删除** — 多选（Ctrl/Shift 点选，或在空白处拖框）后一键从硬盘删除（归档副本 + output 原始文件），单个删除也可。
 - **Live refresh** — the panel auto-syncs every 8 seconds; files manually copied into the output directory get archived, and manual deletions disappear automatically.<br>
   **实时刷新** — 面板每 8 秒自动同步，手动复制进输出目录的文件也会被归档、手动删除也会自动消失。
 - **Output directory switching** — change the output directory in settings; new assets save there instantly and it's **restored automatically after ComfyUI restarts**.<br>
@@ -76,13 +76,15 @@ Download the repo zip and extract it into `ComfyUI/custom_nodes/`, keeping the f
    启动 ComfyUI，顶部菜单栏点「**资产管理**」打开面板。
 2. Top toolbar: search box, grid/calendar toggle, all/image/video/audio filter, multi-select, backup, scan, settings.<br>
    顶部工具栏：搜索框、网格/日历切换、全部/图片/视频/音频过滤、多选、备份、扫描、资产设置。
-3. Left sidebar, always visible: **Source folders** (auto-derived from output sub-directories, with counts) on top and **My categories** pinned below. Click any row to filter the grid on the right; click again on "All folders" / "All categories" to clear.<br>
-   左侧常驻导航栏：上方 **来源文件夹**（按 output 子目录自动派生，带条数），下方 **我的分类**（常驻，不会被文件夹列表挤走）。点任意一行右侧立刻只剩该范围，点「全部文件夹 / 全部分类」恢复。
-4. Select assets (☑ Multi-select) → **Move to category** → pick an existing category or type a new name. Moving rewrites only archive metadata.<br>
-   勾选产物（☑ 多选）→「**移到分类**」→ 选已有分类或直接输入新名字。移动只改归档元数据。
-5. **⚙ Manage categories** (the gear in the My categories header) → rename (✎) or delete (✕) any category, or create a new one. Deleting a category never deletes files: its assets simply become uncategorized.<br>
+3. Left sidebar, always visible: **My categories** on top (height fits its content, scrolls only when there are many) and **Source folders** below (auto-derived from output sub-directories, with counts, takes the remaining height). Click any row to filter the grid on the right; click "All folders" / "All categories" to clear.<br>
+   左侧常驻导航栏：上方 **我的分类**（高度随条目自适应，条目多时才滚动），下方 **来源文件夹**（按 output 子目录自动派生，带条数，占满剩余高度）。点任意一行右侧立刻只剩该范围，点「全部文件夹 / 全部分类」恢复。
+4. Multi-select: click ☑ Multi-select to enter it, or just **Ctrl/Cmd+click** / **Shift+click** on any asset — both switch to multi-select automatically. **Shift+click** selects the whole range from the last clicked asset, **Ctrl+click** toggles one, and **dragging on empty space** draws a box that selects everything it touches (hold Ctrl/Shift to add to the current selection instead of replacing it).<br>
+   多选：点「☑ 多选」进入，也可以直接 **Ctrl/Cmd + 单击** 或 **Shift + 单击**，会自动切进多选。**Shift + 单击** 从上次点击的产物起整段连选，**Ctrl + 单击** 单个加/减，**在空白处拖拽** 拉框选中框到的全部（按住 Ctrl/Shift 是在现有选择上追加，不覆盖）。
+5. Select assets → **Move to category** → a dialog lists your categories as radio rows (the one your assets already belong to is marked **current**), with a search box once there are many, a separate **Uncategorized (clear)** action at the bottom, and a create-and-move row. Moving rewrites only archive metadata.<br>
+   勾选产物 →「**移到分类**」→ 弹窗把分类列成单选项（这些产物当前所属的分类会标 **当前**），分类多了会显示搜索框，底部单独一条 **未分类（移出分类）**，以及新建并移入。移动只改归档元数据。
+6. **⚙ Manage categories** (the gear in the My categories header) → rename (✎) or delete (✕) any category, or create a new one. Deleting a category never deletes files: its assets simply become uncategorized.<br>
    分类区标题旁的 **⚙** → 重命名（✎）/ 删除（✕）任意分类，也可直接新建。删除分类**不会删除文件**，该分类下的产物只会变回「未分类」。
-6. Click an asset → preview dialog: play audio/video, copy prompt / download workflow.json (drag back to canvas to reproduce) / delete from disk.<br>
+7. Click an asset → preview dialog: play audio/video, copy prompt / download workflow.json (drag back to canvas to reproduce) / delete from disk.<br>
    点产物 → 预览弹窗：播放音频/视频、复制提示词 / 下载 workflow.json（拖回画布复现）/ 从硬盘删除。
 
 Audio files are auto-archived for `.wav`, `.mp3`, `.flac`, `.ogg`, `.opus`, `.m4a`, `.aac`, `.aiff`, `.aif`, and `.wma`. Playback uses the browser's native audio player, so actual playback depends on the browser's codec support. Audio metadata and duration are best-effort when PyAV is installed; if metadata is absent, ComfyUI execution history is queried for the prompt/workflow.<br>
