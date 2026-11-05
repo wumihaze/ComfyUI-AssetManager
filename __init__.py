@@ -23,7 +23,7 @@ WEB_DIRECTORY = "web"
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 
-__version__ = "1.0.8"
+__version__ = "1.0.9"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _cfg = assets_core.load_config(BASE_DIR)
@@ -349,16 +349,19 @@ async def asset_category(request):
     action = body.get("action")
     name = body.get("name")
     category_id = body.get("id")
+    parent = body.get("parent")
     if category_id is not None and not isinstance(category_id, str):
         return web.json_response({"ok": False, "error": "id must be a string"})
     if name is not None and not isinstance(name, str):
         return web.json_response({"ok": False, "error": "name must be a string"})
+    if parent is not None and not isinstance(parent, str):
+        return web.json_response({"ok": False, "error": "parent must be a string"})
 
     def _go():
         try:
             with _LOCK:
                 if action == "create":
-                    return assets_core.create_category(_arch, name)
+                    return assets_core.create_category(_arch, name, parent)
                 if action == "rename":
                     return assets_core.rename_category(_arch, category_id, name)
                 if action == "delete":

@@ -11,9 +11,9 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image, video,
 - **Dual views** — grid view + **calendar view** (grouped by date, with daily image/video/audio count badges; click a day to see that day's assets).<br>
   **双视图浏览** — 网格视图 + **日历视图**（按日期归档，每天显示图片/视频/音频数量徽标，点某天看当天产物）。
 - **Search & filter** — full-text search by prompt/model/filename/date; filter by image/video/audio, by **source folder**, or by **your own category**.<br>
-  **搜索与过滤** — 按提示词/模型/文件名/日期全文搜索，可按图片/视频/音频、**来源文件夹**、**自建分类**过滤。
-- **Folder & category browsing** — date grouping stays; on top of it you get two more ways to find things: **source folder** (derived automatically from the output subdirectory, zero setup, works on existing archives) and **your own categories** (create any, then multi-select assets and move them in). Moving only rewrites the archive metadata — original files and the archive layout are untouched, so it is instant and reversible.<br>
-  **文件夹与分类浏览** — 日期分组保留，在此基础上多两个查找维度：**来源文件夹**（按 output 子目录自动派生，零操作，历史归档立刻可用）与**自建分类**（自己建，多选后移入）。移动只改归档元数据，不动原始文件、不动归档目录结构，毫秒级且可逆。
+  **搜索与过滤** — 按提示词/模型/文件名/日期全文搜索，可按图片/视频/音频、**自建分类**（两级树）过滤，需要时还能按**来源文件夹**筛。
+- **Category tree** — date grouping stays, but the sidebar is now a single, folder-like tree: create categories, nest one level of sub-categories under them, and multi-select assets to move them in. Selecting a parent includes everything in its sub-categories. Moving only rewrites archive metadata — original files and the archive layout are untouched, so it is instant and reversible. The source-folder filter is still there, folded away at the bottom.<br>
+  **分类树** — 日期分组保留，但左侧只剩一棵像文件夹的树：建分类、在分类下再挂一层子分类、多选产物移进去。选中父分类会把子分类里的产物一并算进来。移动只改归档元数据，不动原始文件、不动归档目录结构，毫秒级且可逆；「来源文件夹」筛选仍在，收在侧栏底部。
 - **Preview & reproduce** — view full-size images, play videos and audio, copy prompt, download `workflow.json` (drag it back onto the canvas to restore the whole workflow).<br>
   **预览与复现** — 查看大图、播放视频和音频、复制提示词、下载 workflow.json（拖回画布还原整套工作流）。
 - **Batch delete** — multi-select (Ctrl/Shift click or drag a box on empty space) and delete from disk in one click (archive copy + original output file); single delete too.<br>
@@ -76,14 +76,14 @@ Download the repo zip and extract it into `ComfyUI/custom_nodes/`, keeping the f
    启动 ComfyUI，顶部菜单栏点「**资产管理**」打开面板。
 2. Top toolbar: search box, grid/calendar toggle, all/image/video/audio filter, multi-select, backup, scan, settings.<br>
    顶部工具栏：搜索框、网格/日历切换、全部/图片/视频/音频过滤、多选、备份、扫描、资产设置。
-3. Left sidebar, always visible: **My categories** on top (height fits its content, scrolls only when there are many) and **Source folders** below (auto-derived from output sub-directories, with counts, takes the remaining height). Click any row to filter the grid on the right; click "All folders" / "All categories" to clear.<br>
-   左侧常驻导航栏：上方 **我的分类**（高度随条目自适应，条目多时才滚动），下方 **来源文件夹**（按 output 子目录自动派生，带条数，占满剩余高度）。点任意一行右侧立刻只剩该范围，点「全部文件夹 / 全部分类」恢复。
+3. Left sidebar: one **My categories** tree that takes the full height. Sub-categories are indented with a blue bar, and a parent's count includes its children. Click any row to filter the grid; click "All categories" to clear. **Source folders** sits collapsed at the bottom — click its header to expand (it remembers the active folder filter and shows it as a chip with a ✕ to clear).<br>
+   左侧导航：一棵占满高度的 **我的分类** 树。子分类缩进并带蓝色竖条，父分类的条数包含其子分类。点任意一行右侧立刻只剩该范围，点「全部分类」恢复。**来源文件夹** 默认收在底部，点标题展开；已选的文件夹筛选会显示成小标签，点 ✕ 清除。
 4. Multi-select: click ☑ Multi-select to enter it, or just **Ctrl/Cmd+click** / **Shift+click** on any asset — both switch to multi-select automatically. **Shift+click** selects the whole range from the last clicked asset, **Ctrl+click** toggles one, and **dragging on empty space** draws a box that selects everything it touches (hold Ctrl/Shift to add to the current selection instead of replacing it).<br>
    多选：点「☑ 多选」进入，也可以直接 **Ctrl/Cmd + 单击** 或 **Shift + 单击**，会自动切进多选。**Shift + 单击** 从上次点击的产物起整段连选，**Ctrl + 单击** 单个加/减，**在空白处拖拽** 拉框选中框到的全部（按住 Ctrl/Shift 是在现有选择上追加，不覆盖）。
 5. Select assets → **Move to category** → a dialog lists your categories as radio rows (the one your assets already belong to is marked **current**), with a search box once there are many, a separate **Uncategorized (clear)** action at the bottom, and a create-and-move row. Moving rewrites only archive metadata.<br>
    勾选产物 →「**移到分类**」→ 弹窗把分类列成单选项（这些产物当前所属的分类会标 **当前**），分类多了会显示搜索框，底部单独一条 **未分类（移出分类）**，以及新建并移入。移动只改归档元数据。
-6. **⚙ Manage categories** (the gear in the My categories header) → rename (✎) or delete (✕) any category, or create a new one. Deleting a category never deletes files: its assets simply become uncategorized.<br>
-   分类区标题旁的 **⚙** → 重命名（✎）/ 删除（✕）任意分类，也可直接新建。删除分类**不会删除文件**，该分类下的产物只会变回「未分类」。
+6. **⚙ Manage categories** (the gear in the My categories header) → rename (✎), delete (✕), or create. On a top-level row, **＋** adds a sub-category right under it. Deleting a category never deletes files: its assets become uncategorized and its sub-categories move up one level.<br>
+   分类区标题旁的 **⚙** → 重命名（✎）/ 删除（✕）/ 新建。一级分类行上的 **＋** 直接在它下面建子分类。删除分类**不会删除文件**：该分类下的产物变回「未分类」，它的子分类上移一层。
 7. Click an asset → preview dialog: play audio/video, copy prompt / download workflow.json (drag back to canvas to reproduce) / delete from disk.<br>
    点产物 → 预览弹窗：播放音频/视频、复制提示词 / 下载 workflow.json（拖回画布复现）/ 从硬盘删除。
 

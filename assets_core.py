@@ -142,6 +142,26 @@ def _clean_category_name(name):
     return name[:CATEGORY_NAME_MAX]
 
 
+def _normalize_parents(items):
+    """把 parent 校正成"只能挂在一级分类下": 丢掉悬空/自指/成环的父引用。"""
+    by_id = {c["id"]: c for c in items}
+    for c in items:
+        p = c.get("parent")
+        if not isinstance(p, str) or p == c["id"] or p not in by_id:
+            c["parent"] = None
+    # 父分类自己也挂了父 → 链条压平, 保证最多两层
+    for _ in range(len(items)):
+        changed = False
+        for c in items:
+            p = c.get("parent")
+            if p and by_id[p].get("parent"):
+                c["parent"] = None
+                changed = True
+        if not changed:
+            break
+    return items
+
+
 def load_categories(archive_dir):
     """读取分类清单, 对损坏/异常内容保持容错, 只返回结构合法的条目。"""
     try:
@@ -160,7 +180,14 @@ def load_categories(archive_dir):
             continue
         seen.add(cid)
         order = item.get("order")
-        out.append({"id": cid, "name": name, "order": order if isinstance(order, int) else idx})
+        parent = item.get("parent")
+        out.append({
+            "id": cid,
+            "name": name,
+            "order": order if isinstance(order, int) else idx,
+            "parent": parent if isinstance(parent, str) and parent else None,
+        })
+    out = _normalize_parents(out)
     out.sort(key=lambda c: c["order"])
     return {"categories": out[:CATEGORY_LIMIT]}
 
@@ -172,7 +199,13 @@ def save_categories(archive_dir, data):
     os.replace(tmp, fp)
 
 
-def create_category(archive_dir, name):
+def _siblings(items, parent):
+    """同一层级的分类(同名只在该层内算重名)。"""
+    want = parent or None
+    return [c for c in items if (c.get("parent") or None) == want]
+
+
+def create_category(archive_dir, name, parent=None):
     name = _clean_category_name(name)
     if not name:
         return {"ok": False, "error": "Category name is required"}
@@ -180,12 +213,22 @@ def create_category(archive_dir, name):
     items = data["categories"]
     if len(items) >= CATEGORY_LIMIT:
         return {"ok": False, "error": "Too many categories"}
-    if any(c["name"].casefold() == name.casefold() for c in items):
+    parent = parent or None
+    if parent is not None:
+        if not isinstance(parent, str) or not any(c["id"] == parent for c in items):
+            return {"ok": False, "error": "Parent category not found"}
+        if any(c["id"] == parent and c.get("parent") for c in items):
+            return {"ok": False, "error": "Only one level of nesting is supported"}
+    sibs = _siblings(items, parent)
+    if any(c["name"].casefold() == name.casefold() for c in sibs):
         return {"ok": False, "error": "Category already exists"}
     cid = uuid.uuid4().hex[:8]
-    items.append({"id": cid, "name": name, "order": len(items)})
+    item = {"id": cid, "name": name, "order": max([c["order"] for c in sibs], default=-1) + 1}
+    if parent:
+        item["parent"] = parent
+    items.append(item)
     save_categories(archive_dir, data)
-    return {"ok": True, "category": {"id": cid, "name": name}, "categories": items}
+    return {"ok": True, "category": {"id": cid, "name": name, "parent": parent}, "categories": items}
 
 
 def rename_category(archive_dir, category_id, name):
@@ -195,8 +238,9 @@ def rename_category(archive_dir, category_id, name):
     data = load_categories(archive_dir)
     for item in data["categories"]:
         if item["id"] == category_id:
-            if any(c["id"] != category_id and c["name"].casefold() == name.casefold()
-                   for c in data["categories"]):
+            sib = item.get("parent") or None
+            if any(c["id"] != category_id and (c.get("parent") or None) == sib
+                   and c["name"].casefold() == name.casefold() for c in data["categories"]):
                 return {"ok": False, "error": "Category already exists"}
             item["name"] = name
             save_categories(archive_dir, data)
@@ -205,15 +249,23 @@ def rename_category(archive_dir, category_id, name):
 
 
 def delete_category(archive_dir, category_id):
-    """删除分类, 并把该分类下的归档记录改回未分类(避免留下悬空 id)。"""
+    """删除分类: 该分类下的产物回到未分类, 子分类上提一层(不连带删除)。"""
     data = load_categories(archive_dir)
-    keep = [c for c in data["categories"] if c["id"] != category_id]
-    if len(keep) == len(data["categories"]):
+    target = next((c for c in data["categories"] if c["id"] == category_id), None)
+    if target is None:
         return {"ok": False, "error": "Category not found"}
-    data["categories"] = keep
+    data["categories"] = [c for c in data["categories"] if c["id"] != category_id]
+    promoted = 0
+    for c in data["categories"]:
+        if c.get("parent") == category_id:
+            if target.get("parent"):
+                c["parent"] = target["parent"]
+            else:
+                c.pop("parent", None)
+            promoted += 1
     save_categories(archive_dir, data)
     cleared = _clear_category_from_runs(archive_dir, category_id)
-    return {"ok": True, "categories": keep, "cleared": cleared}
+    return {"ok": True, "categories": data["categories"], "cleared": cleared, "promoted": promoted}
 
 
 def _clear_category_from_runs(archive_dir, category_id):

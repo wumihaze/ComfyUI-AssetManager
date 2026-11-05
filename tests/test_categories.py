@@ -101,6 +101,65 @@ class CategoryStoreTests(unittest.TestCase):
             self.assertEqual(assets_core.load_categories(td)["categories"], [])
 
 
+class CategoryNestingTests(unittest.TestCase):
+    def test_child_is_stored_under_parent(self):
+        with tempfile.TemporaryDirectory() as td:
+            pid = assets_core.create_category(td, "角色")["category"]["id"]
+            child = assets_core.create_category(td, "主角", pid)
+            self.assertTrue(child["ok"])
+            self.assertEqual(child["category"]["parent"], pid)
+            items = assets_core.load_categories(td)["categories"]
+            self.assertEqual([(c["name"], c.get("parent")) for c in items],
+                             [("角色", None), ("主角", pid)])
+
+    def test_same_name_allowed_under_different_parents(self):
+        with tempfile.TemporaryDirectory() as td:
+            a = assets_core.create_category(td, "角色")["category"]["id"]
+            b = assets_core.create_category(td, "场景")["category"]["id"]
+            self.assertTrue(assets_core.create_category(td, "草稿", a)["ok"])
+            self.assertTrue(assets_core.create_category(td, "草稿", b)["ok"])
+            # 同一层重名仍然要拦
+            self.assertFalse(assets_core.create_category(td, "草稿", a)["ok"])
+
+    def test_only_one_level_of_nesting(self):
+        with tempfile.TemporaryDirectory() as td:
+            pid = assets_core.create_category(td, "角色")["category"]["id"]
+            cid = assets_core.create_category(td, "主角", pid)["category"]["id"]
+            deep = assets_core.create_category(td, "更深的", cid)
+            self.assertFalse(deep["ok"])
+            self.assertIn("nesting", deep["error"])
+
+    def test_unknown_parent_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            res = assets_core.create_category(td, "孤儿", "deadbeef")
+            self.assertFalse(res["ok"])
+            self.assertIn("Parent", res["error"])
+
+    def test_delete_parent_promotes_children(self):
+        with tempfile.TemporaryDirectory() as td:
+            pid = assets_core.create_category(td, "角色")["category"]["id"]
+            cid = assets_core.create_category(td, "主角", pid)["category"]["id"]
+            res = assets_core.delete_category(td, pid)
+            self.assertTrue(res["ok"])
+            self.assertEqual(res["promoted"], 1)
+            items = assets_core.load_categories(td)["categories"]
+            self.assertEqual([(c["id"], c.get("parent")) for c in items], [(cid, None)])
+
+    def test_bad_parent_refs_are_flattened_on_load(self):
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "categories.json").write_text(json.dumps({"categories": [
+                {"id": "a", "name": "A", "order": 0, "parent": "ghost"},
+                {"id": "b", "name": "B", "order": 1, "parent": "b"},
+                {"id": "c", "name": "C", "order": 2, "parent": "d"},
+                {"id": "d", "name": "D", "order": 3, "parent": "c"},
+            ]}, ensure_ascii=False), encoding="utf-8")
+            items = {c["id"]: c for c in assets_core.load_categories(td)["categories"]}
+            self.assertIsNone(items["a"]["parent"])
+            self.assertIsNone(items["b"]["parent"])
+            # 成环时至少要有一个落地成一级, 不能两个都挂在对方下面
+            self.assertTrue(items["c"]["parent"] is None or items["d"]["parent"] is None)
+
+
 class AssignCategoryTests(unittest.TestCase):
     def test_assign_and_clear(self):
         with tempfile.TemporaryDirectory() as td:
