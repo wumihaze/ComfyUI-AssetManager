@@ -44,13 +44,19 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image, video,
 
 ## 📸 Screenshots · 界面预览
 
+> 截图取自演示归档（程序化生成的抽象画），只用于展示界面。
+
 | Grid · 网格视图 | Calendar · 日历视图 |
 |---|---|
 | ![Grid](assets/screenshots/01-grid.png) | ![Calendar](assets/screenshots/02-calendar.png) |
 
-| Preview · 预览详情 | Settings · 资产设置 | Browse · 目录点选 |
-|---|---|---|
-| ![Preview](assets/screenshots/03-preview.png) | ![Settings](assets/screenshots/04-settings.png) | ![Browse](assets/screenshots/05-browse-dir.png) |
+| Category manager · 分类管理（置顶 / ↑↓ 排序） | Settings · 资产设置 |
+|---|---|
+| ![Categories](assets/screenshots/06-categories.png) | ![Settings](assets/screenshots/04-settings.png) |
+
+| Browse · 目录点选 | Preview · 预览详情 |
+|---|---|
+| ![Browse](assets/screenshots/05-browse-dir.png) | ![Preview](assets/screenshots/03-preview.png) |
 
 ## 📦 Installation · 安装
 
@@ -209,6 +215,25 @@ carry their prompt.
   前端一律用 `textContent` 渲染，不存在把分类名当 HTML 执行的路径。
   `run_ids` 会逐个 `resolve()` 并校验解析后仍在归档目录内，`../`、绝对路径、
   软链接目录一律跳过并回报 `invalid path`；删除分类只把记录改回未分类，不删任何文件。
+- **跨站写请求拦截**（v1.0.12 起）：所有会改动磁盘的接口（改配置 / 改输出目录 / 删除 /
+  批量删除 / 建改分类 / 移分类 / 扫描 / 备份）都会校验 `Origin`。带 `http(s)` 来源且与
+  `Host` 不一致的请求直接 **403**，挡住"随便打开一个网页就能让你的本机 ComfyUI 删文件"
+  这一类 CSRF；不带 `Origin`（curl、脚本、同源导航）和 `Origin: null` 照常放行。
+- **报错不回显绝对路径**（v1.0.12 起）：所有接口的异常文本都换成固定文案
+  （`Category operation failed` / `Assign failed` / `Cannot create <key>` /
+  `Cannot read directory` / `Scan failed`），不再把 `OSError` 的原始字符串
+  （里面通常带完整盘符路径）返回给前端。
+- **媒体路径按字面形状校验**（v1.0.12 起）：`/asset/file` 在 `resolve()` 之前先按字面
+  检查是不是恰好三段 `<日期>/<任务>/<文件名>`，任何一段为空、`.` 或 `..` 直接拒绝。
+  这样 `2026-10-31/run-1/../run-1/a.png` 这类"解析后仍在目录内"的路径也进不来。
+- **扫描不会因为一个坏目录整批失败**（v1.0.12 起）：归档时日期目录被同名文件占位、
+  磁盘写满等 I/O 错误只会跳过当前这一个文件（并清理掉写了一半的目录），不再让整次扫描
+  抛异常、接口 500。
+- **状态文件不当作可信输入**（v1.0.12 起）：去重时从 `archive_state.json` 读到的历史路径
+  必须恰好两段且 `resolve()` 后仍在归档目录内、不是软链接，否则丢弃该条记录。
+- **分类顺序参数同样走校验**：`direction` 只接受 `up` / `down`，`pinned` 必须是真正的
+  布尔值（`"yes"`、`1`、`"true"` 一律拒绝）；读取 `categories.json` 时不再按上限截断，
+  手工改大的文件不会被下一次保存"静默删掉"。
 
 No external process is ever launched: video metadata and thumbnails are handled in-process with
 PyAV, and the codebase contains no `subprocess` / `os.system` / `eval` / `exec`. Configuration keys
@@ -216,7 +241,14 @@ are written through a strict allowlist, numeric options are range-checked, and a
 access is confined to the configured output / archive / backup roots. Since v1.0.6 the media route
 serves only manifest-listed files, the three roots are mutually non-overlapping, symlinks are
 skipped and re-validated after resolution, backups are written atomically to unique files, and
-directory browsing only reveals entries on the path to an allowed root.
+directory browsing only reveals entries on the path to an allowed root. Since v1.0.12 every mutating
+route rejects cross-origin `Origin` headers with 403, error responses never echo absolute paths, the
+media route validates the literal `<date>/<run>/<file>` shape before resolving, a single unwritable
+directory no longer aborts a whole scan, and paths read back from the state file are re-validated
+before use.
+
+回归测试：`tests/test_security.py` 覆盖上述全部输入面（47 个用例，含跨站 403、类型混淆、
+目录穿越、符号链接、超长路径、损坏状态文件）；完整用例集共 122 个，全部通过。
 
 ## 📄 License
 
