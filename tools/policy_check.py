@@ -318,6 +318,8 @@ def run_tests():
     names = [l.split(" (")[0].replace("FAIL: ", "").replace("ERROR: ", "")
              for l in out.splitlines() if l.startswith(("FAIL:", "ERROR:"))]
     check(False, "单元测试全过", "失败: " + ", ".join(names[:6]) if names else out.strip()[-300:])
+    # 光有用例名还得再翻日志才能看到断言原文, 这里直接把尾巴打出来
+    print("\n--- 单元测试输出(尾部) ---\n" + out.strip()[-3000:] + "\n--- 结束 ---\n")
 
 
 def run_http_smoke():
