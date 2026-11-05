@@ -161,7 +161,9 @@ const STYLE = `
 .asm-modal .x:focus-visible { outline:2px solid #5b8cff; outline-offset:2px; }
 /* 预览弹窗给关闭按钮留出一条空档, 不让它压住画面 */
 .asm-modal .pn.preview { padding-top:42px; }
-.asm-modal img { max-height:70vh; object-fit:contain; }
+.asm-modal img { max-height:62vh; object-fit:contain; }
+/* 预览底部按钮粘在弹窗底边: 提示词/备注再长也不会把"删除""下载 workflow"挤出可视区 */
+.asm-modal .pn.preview .pv-foot { position:sticky; bottom:-18px; z-index:2; margin:10px -18px -18px; padding:8px 18px 14px; background:var(--comfy-menu-bg,#202020); border-top:1px solid var(--border-color,#444); }
 /* 设置 */
 .asm-set { margin:4px 0; }
 .asm-set .row { display:flex; gap:8px; align-items:center; margin:8px 0; font-size:13px; }
@@ -1400,7 +1402,7 @@ app.registerExtension({
 
       // 手动备注: 给提不出提示词的产物(网图/截图/转存图)补一句自己的说明。
       // 只写归档目录的 info.json, 不动媒体文件; 会参与搜索匹配。
-      const noteTa = $el("textarea", { textContent: r.note || "", rows: 2 });
+      const noteTa = $el("textarea", { textContent: r.note || "", rows: 2, style: { height: "64px" } });
       bindText(noteTa, "给这条资产加一句备注(写进 info.json, 可被搜索)", "placeholder");
       const noteSave = bindText($el("button.asm-btn", {
         onclick: async () => {
@@ -1439,12 +1441,14 @@ app.registerExtension({
         bindText($el("label", { style: { fontSize: "12px", display: "block", marginTop: "10px" } }), "备注"),
         noteTa,
         $el("div.btns", { style: { marginTop: "6px" } }, [noteSave]),
-        $el("div.btns", {}, [
-          bindText($el("button.asm-btn", { onclick: () => { ta.select(); navigator.clipboard?.writeText(ta.value).then(() => statusMsg(t("已复制"))); } }), "复制提示词"),
-          bindText($el("button.asm-btn.primary", { onclick: () => downloadWorkflow(r) }), "下载 workflow.json"),
-          bindText($el("button.asm-btn.danger", { onclick: () => doDelete(r, m) }), "🗑 从硬盘删除"),
+        $el("div.pv-foot", {}, [
+          $el("div.btns", {}, [
+            bindText($el("button.asm-btn", { onclick: () => { ta.select(); navigator.clipboard?.writeText(ta.value).then(() => statusMsg(t("已复制"))); } }), "复制提示词"),
+            bindText($el("button.asm-btn.primary", { onclick: () => downloadWorkflow(r) }), "下载 workflow.json"),
+            bindText($el("button.asm-btn.danger", { onclick: () => doDelete(r, m) }), "🗑 从硬盘删除"),
+          ]),
+          bindText($el("div", { style: { fontSize: "11px", color: "var(--descrip-text,#aaa)", marginTop: "8px" } }), "💡 下载 workflow.json 后拖进 ComfyUI 画布, 即可完整还原整套工作流(节点+连线)。"),
         ]),
-        bindText($el("div", { style: { fontSize: "11px", color: "var(--descrip-text,#aaa)", marginTop: "8px" } }), "💡 下载 workflow.json 后拖进 ComfyUI 画布, 即可完整还原整套工作流(节点+连线)。"),
       ]);
       m.appendChild($el("div.bk", { onclick: () => m.remove() }));
       m.appendChild(pn);
