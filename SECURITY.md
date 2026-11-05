@@ -57,6 +57,11 @@
   不动媒体文件、不改 `positive`，也不接受任何调用方指定的字段名。内容会剥掉控制字符
   （`\u2028` / `\u2029` 归一为换行），上限 500 字符；空串等于删除该字段。
   写入走临时文件 + `os.replace` 原子替换，失败只回固定文案 `Cannot write note`。
+- **`run_id` 的软链检查在 `resolve()` 之前做**：`resolve()` 拿到的已经是目标本身，
+  之后问 `is_symlink()` 永远为假，归档里指向别处的软链会蒙混过关。现在按字面逐段
+  判断，并直接拒绝 `..`（`run_id` 只应是 `<日期>/<任务>` 两段）。
+- **归档目录缺失不会打断扫描**：写 `archive_state.json` 前先补建父目录，首次扫描或
+  运行中归档目录被删/移走时，只记基线的这一轮也能正常落盘。
 
 No external process is ever launched: video metadata and thumbnails are handled in-process with
 PyAV, and the codebase contains no `subprocess` / `os.system` / `eval` / `exec`. Configuration keys
@@ -70,11 +75,14 @@ media route validates the literal `<date>/<run>/<file>` shape before resolving, 
 directory no longer aborts a whole scan, and paths read back from the state file are re-validated
 before use. Since v1.0.13 the note route writes only the `note` / `note_updated_at` keys of a single
 run's `info.json`, never the media file, and its `run_id` goes through the same path validation as
-deletion.
+deletion. That validation now rejects `..` outright and probes for symlinks segment by segment
+*before* resolving, because `resolve()` returns the target itself and a later `is_symlink()` check
+can never be true.
 
 回归测试：`tests/test_security.py` 覆盖上述全部输入面（51 个用例，含跨站 403、类型混淆、
 目录穿越、符号链接、超长路径、损坏状态文件）；`tests/test_notes.py` 另覆盖备注写入的
-边界（15 个用例）；完整用例集共 141 个，全部通过。
+边界（15 个用例）；`tests/test_audio_support.py` 覆盖扫描侧（软链文件跳过、归档目录缺失
+时仍能落盘）。完整用例集共 142 个，全部通过。
 
 ## 发版前自检
 
