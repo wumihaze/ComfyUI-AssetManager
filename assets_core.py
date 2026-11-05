@@ -119,6 +119,9 @@ def load_state(archive_dir):
 
 def save_state(archive_dir, state):
     fp = state_file(archive_dir)
+    # 归档目录可能还没建(首次扫描)或已被用户删掉/移走。扫描线程不该因为
+    # 一次写状态就整轮抛 FileNotFoundError, 这里顺手补建父目录。
+    fp.parent.mkdir(parents=True, exist_ok=True)
     tmp = Path(str(fp) + ".tmp")
     tmp.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
     os.replace(tmp, fp)
@@ -381,7 +384,9 @@ def resolve_folder(info):
     rel = info.get("source_rel") if isinstance(info, dict) else None
     if not isinstance(rel, str):
         return ""
-    parent = str(Path(rel).parent).replace("\\", "/")
+    # 先把反斜杠统一成正斜杠再交给 Path: Windows 上 \ 是分隔符, Linux 上不是,
+    # 直接 Path(rel).parent 会让同一条记录在两个平台派生出不同的 folder。
+    parent = str(Path(rel.replace("\\", "/")).parent).replace("\\", "/")
     return "" if parent in (".", "") else parent.strip("/")
 
 
@@ -390,6 +395,18 @@ def _run_dir_for(archive_dir, run_id):
     arch = Path(archive_dir).resolve()
     if not isinstance(run_id, str) or not run_id.strip():
         return None
+    # 先按字面逐段查软链: resolve() 之后拿到的已经是目标本身, 再问 is_symlink()
+    # 永远是 False, 归档内指向别的任务目录的软链就会蒙混过关。
+    # 同时直接拒绝 "..": run_id 只应该是 <日期>/<任务> 两段, 没有理由出现上跳。
+    probe = arch
+    for part in Path(run_id).parts:
+        if part == "..":
+            return None
+        if part in ("", "."):
+            continue
+        probe = probe / part
+        if probe.is_symlink():
+            return None
     try:
         run_dir = (arch / run_id).resolve(strict=True)
         run_dir.relative_to(arch)
