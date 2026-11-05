@@ -542,14 +542,14 @@ class RouteSecurityTests(unittest.TestCase):
 
     def test_note_rejects_traversal_and_oversized_note(self):
         make_run(self.arch, "2026-11-05/note-target")
-        for run_id in ("../../etc", "/abs/path"):
+        # run_id 里出现 .. 直接按非法路径拒掉, 不做归一
+        for run_id in ("../../etc", "/abs/path", "2026-11-05/../2026-11-05"):
             status, data = self.call("/asset/note", {"run_id": run_id, "note": "x"})
             self.assertEqual(status, 200, run_id)
             self.assertFalse(data["ok"], run_id)
             self.assertEqual(data["error"], "invalid path", run_id)
-        # 日期目录本身不是一条记录(含 ../ 归一后落到日期目录的情况):
-        # 不会写到它下面的 info.json
-        for run_id in ("2026-11-05", "2026-11-05/../2026-11-05"):
+        # 日期目录本身不是一条记录: 不会写到它下面的 info.json
+        for run_id in ("2026-11-05",):
             status, data = self.call("/asset/note", {"run_id": run_id, "note": "x"})
             self.assertFalse(data["ok"], run_id)
             self.assertEqual(data["error"], "missing info.json", run_id)

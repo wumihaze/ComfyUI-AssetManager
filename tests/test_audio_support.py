@@ -153,6 +153,30 @@ class AudioAssetSupportTests(unittest.TestCase):
             self.assertEqual(count, 0)
             self.assertEqual(assets_core.list_runs(archive), [])
 
+    def test_scan_tolerates_missing_archive_dir(self):
+        """归档目录还不存在(首次扫描/被用户删掉)时, 只记基线也要能把状态落盘。
+
+        此前 save_state 直接往 archive_dir 里写, 目录不存在就抛
+        FileNotFoundError, 把整轮扫描带崩。
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            output_dir = root / "output"
+            output_dir.mkdir()
+            (output_dir / "song.wav").write_bytes(b"audio")
+            archive = root / "archive"
+
+            count = assets_core.scan_all(
+                output_dir,
+                archive,
+                {},
+                {"archive_existing": False, "thumb_width": 480},
+            )
+
+            self.assertEqual(count, 0)
+            self.assertTrue(archive.is_dir())
+            self.assertIn("song.wav", assets_core.load_state(archive))
+
     def test_backup_skips_symlinks_when_supported(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
