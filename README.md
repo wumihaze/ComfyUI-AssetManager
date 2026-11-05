@@ -31,16 +31,28 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image, video,
 
 ### Differentiators · 差异化
 
-- Calendar browsing by date (most similar plugins only have a grid list)<br>
-  日历按日期归档浏览（多数同类插件只有网格列表）
-- Batch delete + live scan refresh (manual drag-in/delete also syncs)<br>
-  批量删除 + 实时扫描刷新（手动拖入/删除文件也会同步）
-- Output directory switching, auto-restored after restart<br>
-  输出目录切换且重启自动恢复
-- Content-fingerprint dedup — tidying up `output/` never duplicates the library<br>
-  内容指纹去重，整理 `output/` 不会让资产库重复
-- Directory picker — no absolute path typing required<br>
-  目录浏览器点选，不依赖手输绝对路径
+同类里做得最完整的四家：**[comfyui-browser](https://github.com/netaart/comfyui-browser)**（679★，面板内浏览 output + 工作流收藏）、**[SmartGallery DAM](https://github.com/biagiomaf/smart-comfyui-gallery)**（399★，独立进程的全功能 DAM）、**[Image MetaHub](https://github.com/LuqP2/Image-MetaHub)**（335★，跨工具的元数据库）、**[ComfyUI Local Media Manager](https://github.com/Firetheft/ComfyUI_Local_Media_Manager)**（146★，面板内的媒体文件管理器）。按各自 README 逐项核对过（2026-11），**确实只有本插件有**的是下面四条：
+
+- **Auto-archive, not just indexing** — the other four index files where they sit; nothing is copied when a generation finishes, so clearing `output/` loses everything. This plugin copies each generation into an archive tree with its own `info.json` / `prompt.txt` / `workflow.json`, so the library survives `output/` being wiped, reorganized, or pointed elsewhere.<br>
+  **自动归档而不是原地索引** — 那四家都是在文件原位置建索引，生成结束时不会复制任何东西，所以清空 `output/` 就全没了。本插件在生成时就把产物连同 `info.json` / `prompt.txt` / `workflow.json` 复制进独立归档树，output 被清空、整理或换盘都不影响资产库。
+- **Content-fingerprint dedup** — tidying `output/` never duplicates the library: moving/renaming a file updates the existing record in place instead of archiving a second copy.<br>
+  **内容指纹去重** — 整理 `output/` 不会让资产库翻倍：移动/改名只更新原记录，不会多出一份。竞品不做归档复制，也就没有这个问题要解决——这一条只对归档型插件有意义。
+- **Calendar view** — a real month grid with per-day image/video/audio counts; click a day to see that day's assets. None of the four above has one (they offer date filtering or sorting at most).<br>
+  **日历视图** — 真正的月历格子，每天标出图片/视频/音频数量，点某天看当天产物。上面四家都没有（最多只有日期筛选或按日期排序）。
+- **Output directory switching, restored after restart** — change ComfyUI's output directory from the panel and new assets save there immediately; the choice survives a ComfyUI restart. Competitors can only "point at" a folder — none of them changes ComfyUI's actual output path.<br>
+  **输出目录切换且重启自动恢复** — 在面板里改 ComfyUI 的输出目录，新产物立刻改存，重启后自动恢复。竞品只能「指向」某个目录，没有一家会去改 ComfyUI 真正的输出路径。
+
+> 反过来，**批量删除、实时刷新、目录点选、标签/合集组织**这几项竞品也都有（SmartGallery 的 Auto-Watch、Local Media Manager 的批量删除、Image MetaHub 的 folder watching 等），所以这里不把它们算作差异点。
+
+| 按 README 核对（2026-11） | comfyui-browser | SmartGallery | Image MetaHub | Local Media Manager | **本插件** |
+|---|:--:|:--:|:--:|:--:|:--:|
+| 归档副本（清空 output 也不丢） | — | — | — | — | ✅ |
+| 内容指纹去重（整理 output 不重复） | n/a | n/a | n/a | n/a | ✅ |
+| 日历视图 | — | — | — | — | ✅ |
+| 面板内切换 output 目录 + 重启恢复 | — | — | — | — | ✅ |
+| 网格浏览 / 提示词搜索 / 批量删除 / 实时刷新 | 部分 | ✅ | ✅ | ✅ | ✅ |
+
+「—」= 该项目 README 未提供该能力（不代表代码里一定没有）；「n/a」= 对方不归档文件，这条对它不适用。这些项目本身都很强——SmartGallery 有队列控制、聚类、客户端评审；Image MetaHub 有相似图搜索和跨工具元数据；comfyui-browser 有工作流 Git 同步。**本插件的定位是「自动归档 + 日历回看」，不是要替代它们。**
 
 ## 📸 Screenshots · 界面预览
 
@@ -184,71 +196,6 @@ carry their prompt.
 
 > 注：归档是复制原始文件，**不会**给你的图片补写元数据；找回的提示词只写进归档目录的
 > `info.json` / `prompt.txt` / `workflow.json`。
-
-## 🔒 Security · 安全说明
-
-本插件从 **v1.0.4** 起按 Comfy Registry 的安全标准收紧了输入面（此前版本因
-`policy-v0.5 command-injection` / `policy-v0.2 ARBITRARY_FILE_LAUNCH` 被标记，相关修复见下）：
-
-- **不启动任何外部进程**：视频元数据/缩略图及音频元数据读取由 **PyAV 在进程内**完成，
-  代码中**已无 `subprocess` / `os.system` / `eval` / `exec`**，从根上消除了命令注入面。
-  音频播放由浏览器原生播放器完成。
-- **配置写入白名单**：`/asset/set_config` 只接受固定的可配置键，任何未知字段都会被拒绝
-  并在响应 `errors` 中说明，不会再被写进运行时配置。
-- **数值与类型校验**：数值项有上下限；布尔项必须是真正的布尔值。
-- **路径沙箱**：媒体文件读取、工作流下载、目录浏览都限制在 output / archive / backup 目录范围内；
-  删除等写操作会校验目标仍在归档目录内（防目录穿越）。
-- **媒体接口只服务登记文件**（v1.0.6 起）：`/asset/file` 不再"凡在归档目录内就返回"，
-  而是要求路径形如 `<日期>/<任务>/<文件名>`，且文件名必须出现在该任务的 `info.json`
-  （`media` / `thumb` / `workflow.json`）里；`info.json`、状态文件、任意本机绝对路径一律 404。
-- **目录互不重叠**：配置与输出目录切换都会校验 output / archive / backup 三者互不包含，
-  避免"归档被当成新产物再次归档"的递归增长，也避免备份把自身打进 ZIP。
-- **不跟随符号链接**：扫描、归档、列表、备份都会跳过符号链接并校验解析后仍在根目录内，
-  防止有人借链接把根目录外的文件复制进归档或备份。
-- **备份原子化**：备份先写唯一临时文件再原子改名（时间戳精确到微秒 + 随机后缀），
-  同一秒并发备份不会互相覆盖。
-- **目录浏览最小化**：在允许根的父级链上只列出"通往允许根"的那一级目录名，
-  不泄露同级无关目录；隐藏项与符号链接不列出。
-- **分类接口加固**（v1.0.7 起）：`/asset/category` 与 `/asset/assign` 拒绝非对象请求体、
-  校验 `action` / `id` / `name` / `run_ids` 的类型与长度上限（名称 ≤40 字符、单次 ≤500 条）；
-  分类名只当纯字符串存储，不参与任何路径拼接（写 `../..` 也只会得到一个名字），
-  前端一律用 `textContent` 渲染，不存在把分类名当 HTML 执行的路径。
-  `run_ids` 会逐个 `resolve()` 并校验解析后仍在归档目录内，`../`、绝对路径、
-  软链接目录一律跳过并回报 `invalid path`；删除分类只把记录改回未分类，不删任何文件。
-- **跨站写请求拦截**（v1.0.12 起）：所有会改动磁盘的接口（改配置 / 改输出目录 / 删除 /
-  批量删除 / 建改分类 / 移分类 / 扫描 / 备份）都会校验 `Origin`。带 `http(s)` 来源且与
-  `Host` 不一致的请求直接 **403**，挡住"随便打开一个网页就能让你的本机 ComfyUI 删文件"
-  这一类 CSRF；不带 `Origin`（curl、脚本、同源导航）和 `Origin: null` 照常放行。
-- **报错不回显绝对路径**（v1.0.12 起）：所有接口的异常文本都换成固定文案
-  （`Category operation failed` / `Assign failed` / `Cannot create <key>` /
-  `Cannot read directory` / `Scan failed`），不再把 `OSError` 的原始字符串
-  （里面通常带完整盘符路径）返回给前端。
-- **媒体路径按字面形状校验**（v1.0.12 起）：`/asset/file` 在 `resolve()` 之前先按字面
-  检查是不是恰好三段 `<日期>/<任务>/<文件名>`，任何一段为空、`.` 或 `..` 直接拒绝。
-  这样 `2026-10-31/run-1/../run-1/a.png` 这类"解析后仍在目录内"的路径也进不来。
-- **扫描不会因为一个坏目录整批失败**（v1.0.12 起）：归档时日期目录被同名文件占位、
-  磁盘写满等 I/O 错误只会跳过当前这一个文件（并清理掉写了一半的目录），不再让整次扫描
-  抛异常、接口 500。
-- **状态文件不当作可信输入**（v1.0.12 起）：去重时从 `archive_state.json` 读到的历史路径
-  必须恰好两段且 `resolve()` 后仍在归档目录内、不是软链接，否则丢弃该条记录。
-- **分类顺序参数同样走校验**：`direction` 只接受 `up` / `down`，`pinned` 必须是真正的
-  布尔值（`"yes"`、`1`、`"true"` 一律拒绝）；读取 `categories.json` 时不再按上限截断，
-  手工改大的文件不会被下一次保存"静默删掉"。
-
-No external process is ever launched: video metadata and thumbnails are handled in-process with
-PyAV, and the codebase contains no `subprocess` / `os.system` / `eval` / `exec`. Configuration keys
-are written through a strict allowlist, numeric options are range-checked, and all file/directory
-access is confined to the configured output / archive / backup roots. Since v1.0.6 the media route
-serves only manifest-listed files, the three roots are mutually non-overlapping, symlinks are
-skipped and re-validated after resolution, backups are written atomically to unique files, and
-directory browsing only reveals entries on the path to an allowed root. Since v1.0.12 every mutating
-route rejects cross-origin `Origin` headers with 403, error responses never echo absolute paths, the
-media route validates the literal `<date>/<run>/<file>` shape before resolving, a single unwritable
-directory no longer aborts a whole scan, and paths read back from the state file are re-validated
-before use.
-
-回归测试：`tests/test_security.py` 覆盖上述全部输入面（47 个用例，含跨站 403、类型混淆、
-目录穿越、符号链接、超长路径、损坏状态文件）；完整用例集共 122 个，全部通过。
 
 ## 📄 License
 
