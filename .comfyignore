@@ -1,0 +1,5 @@
+# 开发期文件: 保留在仓库里, 但不打进 Comfy Registry 发布包
+# Dev-only files: kept in git, excluded from the registry archive.
+# 语法同 .gitignore
+tests/
+assets/screenshots/

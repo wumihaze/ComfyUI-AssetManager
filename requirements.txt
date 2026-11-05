@@ -2,3 +2,10 @@
 # If missing, run: pip install Pillow>=9.0
 # ComfyUI 已自带 Pillow，一般无需单独安装；若缺失执行：pip install Pillow>=9.0
 Pillow>=9.0
+
+# PyAV is used in-process for video thumbnails and audio metadata/duration.
+# The plugin still runs without it (audio still archives and plays), but video
+# thumbnails and audio metadata are unavailable — so it ships as a dependency.
+# PyAV 用于在进程内生成视频缩略图、读取音频元数据/时长。缺少它插件仍可用
+# （音频照常归档与播放），但视频没有缩略图、音频没有元数据，因此列为依赖。
+av>=10.0.0

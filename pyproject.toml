@@ -8,10 +8,16 @@ authors = [{ name = "Wumihaze", email = "317549200+wumihaze@users.noreply.github
 keywords = ["comfyui", "asset-manager", "gallery", "archive", "backup"]
 requires-python = ">=3.9"
 dependencies = ["Pillow>=9.0", "av>=10.0.0"]
+classifiers = [
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
 
 [project.urls]
 Repository = "https://github.com/Wumihaze/ComfyUI-AssetManager"
+"Bug Tracker" = "https://github.com/Wumihaze/ComfyUI-AssetManager/issues"
 
 [tool.comfy]
 PublisherId = "wumihaze"
 DisplayName = "ComfyUI-AssetManager"
+Icon = "https://raw.githubusercontent.com/wumihaze/ComfyUI-AssetManager/master/assets/icon.png"
