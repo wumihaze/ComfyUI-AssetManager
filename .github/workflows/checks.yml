@@ -1,0 +1,25 @@
+name: checks
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  policy:
+    name: Registry policy + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install "Pillow>=9.0" "av>=10.0.0" aiohttp
+
+      - name: Registry policy self-check
+        run: python tools/policy_check.py

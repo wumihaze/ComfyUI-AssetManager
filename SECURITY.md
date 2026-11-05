@@ -75,3 +75,16 @@ deletion.
 回归测试：`tests/test_security.py` 覆盖上述全部输入面（51 个用例，含跨站 403、类型混淆、
 目录穿越、符号链接、超长路径、损坏状态文件）；`tests/test_notes.py` 另覆盖备注写入的
 边界（15 个用例）；完整用例集共 141 个，全部通过。
+
+## 发版前自检
+
+上面这些策略不是靠记性守的，跑一条命令逐条扫：
+
+```bash
+python tools/policy_check.py
+```
+
+13 项检查（危险调用 / 出站网络 / 写接口同源保护 / 报错路径回显 / 前端 XSS / 依赖与版本
+一致性 / Registry 元数据 / 图标尺寸 / 发布包排除 / 单元测试 / HTTP 冒烟），有任何一项不通过
+就以非 0 退出。CI（`.github/workflows/checks.yml`）在每次推送和 PR 上跑同一套。
+发版流程与人工确认项见 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)。

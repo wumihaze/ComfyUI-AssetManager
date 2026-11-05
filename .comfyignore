@@ -2,4 +2,5 @@
 # Dev-only files: kept in git, excluded from the registry archive.
 # 语法同 .gitignore
 tests/
+tools/
 assets/screenshots/
