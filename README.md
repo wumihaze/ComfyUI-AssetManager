@@ -4,7 +4,7 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image, video,
 
 集成进 ComfyUI 网页的**资产管理面板**，自动归档生成的图片、视频和音频，支持浏览、搜索、预览、批量删除和一键备份。
 
-## ✨ Features · 功能亮点
+## 功能说明 · What it does
 
 - **Auto-archive** — a background thread watches the output directory and archives every image, video, and audio asset (on first run it can also import existing files), extracting **prompt / positive-negative / params / models & LoRA / full workflow** where available. It reads image/video container metadata and uses ComfyUI execution history as a fallback; audio metadata and duration are read with PyAV when available.<br>
   **自动归档** — 后台线程监视 output 目录并归档图片、视频和音频（可选择导入已有文件），尽可能提取**提示词 / 正负词 / 参数 / 模型与 LoRA / 完整工作流**。读取图片/视频容器元数据，并可回查 ComfyUI 执行记录；PyAV 可用时也会读取音频元数据和时长。
@@ -12,12 +12,12 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image, video,
   **双视图浏览** — 网格视图 + **日历视图**（按日期归档，每天显示图片/视频/音频数量徽标，点某天看当天产物）。
 - **Search & filter** — full-text search by prompt/model/filename/date; filter by image/video/audio, by **source folder**, or by **your own category**.<br>
   **搜索与过滤** — 按提示词/模型/文件名/日期全文搜索，可按图片/视频/音频、**自建分类**（两级树）过滤，需要时还能按**来源文件夹**筛。
-- **Category tree** — the sidebar is one folder-like tree: create categories, nest one level of sub-categories under them, and multi-select assets to move them in. Selecting a parent includes everything in its sub-categories. Categories can be **pinned to the top** and **reordered** with ↑↓ (per level, pinned ones stay above unpinned ones). Moving only rewrites archive metadata — original files and the archive layout are untouched, so it is instant and reversible. A source-folder filter is also available, folded away at the bottom.<br>
-  **分类树** — 左侧是一棵像文件夹的树：建分类、在分类下再挂一层子分类、多选产物移进去。选中父分类会把子分类里的产物一并算进来。分类可以**置顶**、用 ↑↓ **调整顺序**（按层级分组，置顶的始终排在未置顶之上）。移动只改归档元数据，不动原始文件、不动归档目录结构，毫秒级且可逆；另外还有「来源文件夹」筛选，收在侧栏底部。
+- **Category tree** — the sidebar is one folder-like tree: create categories, nest one level of sub-categories under them, and multi-select assets to move them in. Selecting a parent includes everything in its sub-categories. Categories can be **pinned to the top** and **reordered** with ↑↓ (per level, pinned ones stay above unpinned ones). Moving only rewrites archive metadata — original files and the archive layout are untouched, so it is easy to undo. A source-folder filter is also available, folded away at the bottom.<br>
+  **分类树** — 左侧是一棵像文件夹的树：建分类、在分类下再挂一层子分类、多选产物移进去。选中父分类会把子分类里的产物一并算进来。分类可以**置顶**、用 ↑↓ **调整顺序**（按层级分组，置顶的始终排在未置顶之上）。移动只改归档元数据，不动原始文件、不动归档目录结构，改错了也能改回来；另外还有「来源文件夹」筛选，收在侧栏底部。
 - **Preview & reproduce** — view full-size images, play videos and audio, copy prompt, download `workflow.json` (drag it back onto the canvas to restore the whole workflow).<br>
   **预览与复现** — 查看大图、播放视频和音频、复制提示词、下载 workflow.json（拖回画布还原整套工作流）。
-- **Batch delete** — multi-select (Ctrl/Shift click or drag a box on empty space) and delete from disk in one click (archive copy + original output file); single delete too.<br>
-  **批量删除** — 多选（Ctrl/Shift 点选，或在空白处拖框）后一键从硬盘删除（归档副本 + output 原始文件），单个删除也可。
+- **Batch delete** — multi-select (Ctrl/Shift click or drag a box on empty space) and delete from disk in one go (archive copy + original output file); single delete too.<br>
+  **批量删除** — 多选（Ctrl/Shift 点选，或在空白处拖框）后一次性从硬盘删除（归档副本 + output 原始文件），单个删除也可。
 - **Live refresh** — the panel auto-syncs every 8 seconds; files manually copied into the output directory get archived, and manual deletions disappear automatically.<br>
   **实时刷新** — 面板每 8 秒自动同步，手动复制进输出目录的文件也会被归档、手动删除也会自动消失。
 - **Content-fingerprint dedup** — every archived file is SHA-256 fingerprinted. When you **move or rename** a file in the output directory, the existing archive record is updated in place (source path, folder, category all preserved) instead of creating a second copy — so tidying up `output/` in Explorer no longer duplicates your library. Genuinely different files, and cases where **both** copies still exist, stay as separate records. Files over 64 MB skip the fingerprint and fall back to path-based tracking.<br>
