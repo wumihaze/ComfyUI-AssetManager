@@ -211,6 +211,57 @@ class DeleteRunIndexTests(unittest.TestCase):
             self.assertEqual(len(run_dirs(arch)), 1)
 
 
+class ContentIndexRebuildTests(unittest.TestCase):
+    """state 被覆盖/删掉后, 索引要能从 info.json 自愈。"""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        root = Path(self._td.name)
+        self.out, self.arch = root / "output", root / "archive"
+        self.out.mkdir()
+        self.arch.mkdir()
+        self.state = {"__baseline_done__": True}
+
+    def tearDown(self):
+        self._td.cleanup()
+
+    def test_rebuild_from_info_json(self):
+        write_media(self.out / "a.png", b"payload")
+        r = assets_core.archive_file("a.png", self.out / "a.png", self.arch,
+                                     self.state, CFG, source_root=self.out)
+        h = assets_core.file_content_hash(self.out / "a.png")
+
+        # 模拟 state 被旧进程用启动时的副本覆盖
+        self.state.pop("__content__")
+        self.state.pop("__content_backfilled__", None)
+        self.assertEqual(assets_core._rebuild_content_index(self.arch, self.state), 1)
+        self.assertEqual(self.state["__content__"][h], r["dir"])
+        self.assertTrue(self.state["__content_backfilled__"])
+
+    def test_rebuild_skips_broken_records(self):
+        write_media(self.out / "a.png", b"payload")
+        assets_core.archive_file("a.png", self.out / "a.png", self.arch,
+                                 self.state, CFG, source_root=self.out)
+        broken = self.arch / "2026-11-05" / "broken-run"
+        broken.mkdir(parents=True)
+        (broken / "info.json").write_text("{not json", encoding="utf-8")
+        self.assertEqual(assets_core._rebuild_content_index(self.arch, self.state), 1)
+
+    def test_scan_rebuilds_index_then_merges_move(self):
+        """索引丢了也不影响去重: scan 先自愈, 移动仍被合并。"""
+        write_media(self.out / "a.png", b"payload")
+        assets_core.scan_all(self.out, self.arch, self.state, CFG)
+        self.assertEqual(len(run_dirs(self.arch)), 1)
+
+        self.state.pop("__content__")
+        self.state.pop("__content_backfilled__", None)
+        os.replace(self.out / "a.png", self.out / "b.png")
+
+        self.assertEqual(assets_core.scan_all(self.out, self.arch, self.state, CFG), 0)
+        self.assertEqual(len(run_dirs(self.arch)), 1)
+        self.assertEqual(read_info(self.arch, run_dirs(self.arch)[0])["source_rel"], "b.png")
+
+
 class ScanMovedFileTests(unittest.TestCase):
     """走完整 scan_all: 整理 output 后扫描, 记录数必须不涨。"""
 

@@ -631,6 +631,35 @@ def _content_lookup(state, content_hash):
     return hit if isinstance(hit, str) and hit else None
 
 
+def _rebuild_content_index(arch, state):
+    """从归档里的 info.json 重建内容索引。
+
+    state 被旧进程覆盖/删掉时会丢 `__content__`, 这里按盘上的记录补回来;
+    只为兜底, 每个进程只在 `__content_backfilled__` 缺失时跑一次。
+    """
+    arch = Path(arch)
+    idx = {}
+    try:
+        infos = list(arch.glob("*/*/info.json"))
+    except OSError:
+        infos = []
+    for info_file in infos:
+        try:
+            if info_file.is_symlink() or not info_file.is_file():
+                continue
+            info = json.loads(info_file.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(info, dict):
+            continue
+        h = info.get("content_hash")
+        if isinstance(h, str) and h:
+            idx.setdefault(h, info_file.parent.relative_to(arch).as_posix())
+    state["__content__"] = idx
+    state["__content_backfilled__"] = True
+    return len(idx)
+
+
 def _merge_moved_file(arch, prev_rel, rel, src, st, state, source_root):
     """同一份内容换了路径(移动/改名): 更新原记录而不是再归档一份。
 
@@ -836,6 +865,10 @@ def scan_all(output_dir, archive_dir, state, cfg, prompt_resolver=None):
     state_changed = False
     archive_existing = bool(cfg.get("archive_existing", False))
     baseline_done = bool(state.get("__baseline_done__", False))
+    if not state.get("__content_backfilled__"):
+        # 升级后第一次扫描: 把历史记录的内容指纹索引补回来(每个进程只做一次)
+        _rebuild_content_index(arch, state)
+        state_changed = True
     for root, dirs, files in os.walk(out, followlinks=False):
         root_path = Path(root)
         dirs[:] = [
