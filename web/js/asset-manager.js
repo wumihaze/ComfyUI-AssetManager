@@ -23,6 +23,9 @@ const STYLE = `
 .asm-card .m { position:relative; aspect-ratio:1/1; background:#000; }
 .asm-card .selmark { position:absolute; top:6px; right:6px; width:22px; height:22px; border-radius:50%; background:#5b8cff; color:#fff; font-size:13px; display:flex; align-items:center; justify-content:center; z-index:2; }
 .asm-card img { width:100%; height:100%; object-fit:cover; display:block; }
+.asm-card .audio-art { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; background:radial-gradient(circle at 50% 35%, rgba(91,140,255,.32), rgba(30,35,52,.95) 72%); color:#dbe5ff; }
+.asm-card .audio-art .note { font-size:58px; line-height:1; }
+.asm-card .audio-art .format { font-size:11px; letter-spacing:1px; opacity:.8; text-transform:uppercase; }
 .asm-card .play { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:42px; height:42px; border-radius:50%; background:rgba(0,0,0,.6); border:2px solid rgba(255,255,255,.7); color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px; pointer-events:none; }
 .asm-card .badge { position:absolute; top:6px; left:6px; background:rgba(0,0,0,.65); color:#fff; font-size:10px; padding:1px 7px; border-radius:10px; }
 .asm-card .meta { padding:7px 9px; }
@@ -53,6 +56,7 @@ const STYLE = `
 .asm-day .tag { font-size:9px; padding:1px 6px; border-radius:10px; line-height:1.5; font-weight:600; }
 .asm-day .tag-img { background:rgba(91,140,255,.20); color:#8fb0ff; }
 .asm-day .tag-vid { background:rgba(255,150,60,.18); color:#ffa05e; }
+.asm-day .tag-aud { background:rgba(170,115,255,.20); color:#c5a2ff; }
 .asm-callist h3 { font-size:15px; font-weight:600; margin:0 0 14px; padding-bottom:10px; border-bottom:1px solid var(--border-color,#3a3a3a); }
 .asm-callist h3 .sub { font-size:12px; color:var(--descrip-text,#aaa); font-weight:400; margin-left:4px; }
 .asm-callist .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:12px; }
@@ -63,6 +67,7 @@ const STYLE = `
 .asm-modal .pn { position:relative; background:var(--comfy-menu-bg,#202020); border:1px solid var(--border-color,#444); border-radius:12px; width:min(900px,94vw); max-height:92vh; overflow:auto; padding:18px; }
 .asm-modal video, .asm-modal img { max-width:100%; border-radius:8px; display:block; margin:0 auto; }
 .asm-modal video { max-height:55vh; }
+.asm-modal audio { width:min(560px,100%); display:block; margin:12px auto; }
 .asm-modal .rows { margin-top:12px; font-size:12px; color:var(--descrip-text,#aaa); }
 .asm-modal textarea { width:100%; height:130px; background:var(--comfy-input-bg,#333); border:1px solid var(--border-color,#444); color:var(--input-text,#eee); border-radius:6px; padding:8px; font-size:12px; margin-top:6px; }
 .asm-modal .btns { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
@@ -102,6 +107,7 @@ app.registerExtension({
       "全部": "All types",
       "图片": "Images",
       "视频": "Videos",
+      "音频": "Audio",
       "☑ 多选": "☑ Multi-select",
       "🗑 删除选中": "🗑 Delete selected",
       "⚙ 资产设置": "⚙ Settings",
@@ -115,6 +121,7 @@ app.registerExtension({
       "点选日期查看当天产物": "Click a date to view its assets",
       "来源: ": "Source: ",
       "时间: ": "Time: ",
+      "时长: ": "Duration: ",
       "模型/LoRA: ": "Models/LoRA: ",
       "参数: ": "Params: ",
       "提示词": "Prompt text",
@@ -147,7 +154,7 @@ app.registerExtension({
       "取消": "Dismiss",
       "💾 备份确认": "💾 Backup confirmation",
       "将备份以下内容:": "Will back up:",
-      "• 资产库（图片/视频/元数据/工作流）<br>• 工作流文件 (user/default/workflows)<br>• 插件配置": "• Asset library (images / videos / metadata / workflows)<br>• Workflow files (user/default/workflows)<br>• Plugin config",
+      "• 资产库（图片/视频/音频/元数据/工作流）<br>• 工作流文件 (user/default/workflows)<br>• 插件配置": "• Asset library (images / videos / audio / metadata / workflows)<br>• Workflow files (user/default/workflows)<br>• Plugin config",
       "备份目录: ": "Backup directory: ",
       "确定备份": "Back up",
       "备份中…": "Backing up…",
@@ -323,6 +330,7 @@ app.registerExtension({
       mkKindBtn("全部", "all"),
       mkKindBtn("图片", "image"),
       mkKindBtn("视频", "video"),
+      mkKindBtn("音频", "audio"),
       multiBtn,
       batchBtn,
       settingsBtn,
@@ -354,10 +362,17 @@ app.registerExtension({
       if (selected.has(r.dir)) card.classList.add("selected");
       const thumb = r.thumb ? mediaUrl(r.dir, r.thumb) : mediaUrl(r.dir, r.media);
       const isVid = r.kind === "video";
+      const isAudio = r.kind === "audio";
+      const visual = isAudio
+        ? $el("div.audio-art", {}, [
+            $el("span.note", { textContent: "♫" }),
+            $el("span.format", { textContent: ((r.media || "").split(".").pop() || "audio") }),
+          ])
+        : $el("img", { src: thumb, loading: "lazy" });
       card.appendChild($el("div.m", {}, [
-        $el("img", { src: thumb, loading: "lazy" }),
+        visual,
         isVid ? $el("div.play", { textContent: "▶" }) : null,
-        $el("span.badge", { textContent: isVid ? t("视频") : t("图") }),
+        $el("span.badge", { textContent: isVid ? t("视频") : isAudio ? t("音频") : t("图") }),
         selected.has(r.dir) ? $el("div.selmark", { textContent: "✓" }) : null,
       ].filter(Boolean)));
       card.appendChild($el("div.meta", {}, [
@@ -391,7 +406,12 @@ app.registerExtension({
 
     function countOf(d) {
       const l = byDate[d] || [];
-      return { all: l.length, img: l.filter(r => r.kind === "image").length, vid: l.filter(r => r.kind === "video").length };
+      return {
+        all: l.length,
+        img: l.filter(r => r.kind === "image").length,
+        vid: l.filter(r => r.kind === "video").length,
+        aud: l.filter(r => r.kind === "audio").length,
+      };
     }
 
     function renderCal() {
@@ -415,10 +435,11 @@ app.registerExtension({
           if (kind === "all") {
             if (c.img) cnt.appendChild($el("span.tag.tag-img", { textContent: c.img + (LANG === "zh" ? " 图" : " img") }));
             if (c.vid) cnt.appendChild($el("span.tag.tag-vid", { textContent: c.vid + (LANG === "zh" ? " 视" : " vid") }));
+            if (c.aud) cnt.appendChild($el("span.tag.tag-aud", { textContent: c.aud + (LANG === "zh" ? " 音" : " aud") }));
           } else {
-            const n = kind === "image" ? c.img : c.vid;
-            const cls = kind === "image" ? "tag-img" : "tag-vid";
-            const label = LANG === "zh" ? (kind === "image" ? " 图" : " 视") : (kind === "image" ? " img" : " vid");
+            const n = kind === "image" ? c.img : kind === "video" ? c.vid : c.aud;
+            const cls = kind === "image" ? "tag-img" : kind === "video" ? "tag-vid" : "tag-aud";
+            const label = LANG === "zh" ? (kind === "image" ? " 图" : kind === "video" ? " 视" : " 音") : (kind === "image" ? " img" : kind === "video" ? " vid" : " aud");
             cnt.appendChild($el("span.tag." + cls, { textContent: n + label }));
           }
           day.appendChild(cnt);
@@ -428,16 +449,20 @@ app.registerExtension({
       }
       const base = (selDate && byDate[selDate]) ? byDate[selDate].length : 0;
       const list = selDate ? filtered(byDate[selDate] || []) : [];
-      let title;
+      calListTitle.textContent = "";
       if (selDate) {
-        title = LANG === "zh" ? (selDate + " · 当天归档 " + base + " 条") : (selDate + " · " + base + " assets");
+        calListTitle.appendChild(document.createTextNode(
+          LANG === "zh" ? (selDate + " · 当天归档 " + base + " 条") : (selDate + " · " + base + " assets")
+        ));
+        if (kind !== "all" || q.value.trim()) {
+          const sub = $el("span.sub", {
+            textContent: LANG === "zh" ? "（当前筛选 " + list.length + " 条）" : "(filtered: " + list.length + ")",
+          });
+          calListTitle.appendChild(sub);
+        }
       } else {
-        title = t("点选日期查看当天产物");
+        calListTitle.textContent = t("点选日期查看当天产物");
       }
-      if (selDate && (kind !== "all" || q.value.trim())) {
-        title += LANG === "zh" ? " <span class='sub'>（当前筛选 " + list.length + " 条）</span>" : " <span class='sub'>(filtered: " + list.length + ")</span>";
-      }
-      calListTitle.innerHTML = title;
       calListCards.innerHTML = "";
       if (selDate && base === 0) calListCards.appendChild($el("div.asm-empty", { textContent: t("当天没有归档产物") }));
       else if (!list.length && selDate) calListCards.appendChild($el("div.asm-empty", { textContent: t("当天没有匹配当前筛选的产物") }));
@@ -507,9 +532,15 @@ app.registerExtension({
       }
       let msg;
       if (r.no_prompt_reason === "no_embedded_metadata") {
-        msg = LANG === "zh"
-          ? "⚠ 这个文件本身不带 ComfyUI 元数据。常见原因: 从浏览器另存、手机/微信转存后拖进 output 目录的图片, 或 ComfyUI 启动时加了 --disable-metadata。这类文件没有提示词可提取; 用「保存图像 / SaveImage」节点跑出来的图会自动归档并带上提示词。"
-          : "⚠ This file carries no ComfyUI metadata. Common causes: an image saved from the browser, a phone/WeChat transfer dropped into the output directory, or ComfyUI started with --disable-metadata. Such files have no prompt to extract; images produced through a SaveImage node are archived with their prompt.";
+        if (r.kind === "audio") {
+          msg = LANG === "zh"
+            ? "⚠ 这个音频文件没有可读取的 ComfyUI 提示词元数据；若由 ComfyUI 生成，插件会尝试从执行记录中找回提示词和工作流。"
+            : "⚠ This audio file has no readable ComfyUI prompt metadata. For files generated by ComfyUI, the plugin also tries to recover the prompt and workflow from execution history.";
+        } else {
+          msg = LANG === "zh"
+            ? "⚠ 这个文件本身不带 ComfyUI 元数据。常见原因: 从浏览器另存、手机/微信转存后拖进 output 目录的图片, 或 ComfyUI 启动时加了 --disable-metadata。这类文件没有提示词可提取; 用「保存图像 / SaveImage」节点跑出来的图会自动归档并带上提示词。"
+            : "⚠ This file carries no ComfyUI metadata. Common causes: an image saved from the browser, a phone/WeChat transfer dropped into the output directory, or ComfyUI started with --disable-metadata. Such files have no prompt to extract; images produced through a SaveImage node are archived with their prompt.";
+        }
       } else if (r.no_prompt_reason === "no_text_nodes") {
         msg = LANG === "zh"
           ? "这次运行没有文本提示词节点(例如纯图像处理、证件照类工作流), 所以没有提示词可提取。"
@@ -529,7 +560,13 @@ app.registerExtension({
       const full = mediaUrl(r.dir, r.media);
       const media = r.kind === "video"
         ? $el("video", { src: full, controls: true, autoplay: true, muted: true, playsinline: true })
-        : $el("img", { src: full });
+        : r.kind === "audio"
+          ? $el("audio", { src: full, controls: true, preload: "metadata" })
+          : $el("img", { src: full });
+      const duration = Number(r.media_duration);
+      const durationLabel = Number.isFinite(duration) && duration > 0
+        ? Math.floor(duration / 60) + ":" + String(Math.floor(duration % 60)).padStart(2, "0")
+        : "";
       const ta = $el("textarea", { textContent: (r.positive || "") + (r.negative ? "\n\nNegative prompt: " + r.negative : "") });
       const ph = promptHint(r);
       const models = (r.models || []).join(", ") || "—";
@@ -540,6 +577,7 @@ app.registerExtension({
         $el("div.rows", {}, [
           labeledRow([{ zh: "来源: ", text: r.name }]),
           labeledRow([{ zh: "时间: ", text: r.time + " | " }, { zh: "模型/LoRA: ", text: models }]),
+          ...(durationLabel ? [labeledRow([{ zh: "时长: ", text: durationLabel }])] : []),
           labeledRow([{ zh: "参数: ", text: params }]),
         ]),
         bindText($el("label", { style: { fontSize: "12px" } }), "提示词"),

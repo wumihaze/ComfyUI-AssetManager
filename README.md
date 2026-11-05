@@ -1,19 +1,19 @@
 # ComfyUI-AssetManager
 
-An in-panel **asset manager** for ComfyUI that auto-archives every image/video you generate — browse, search, batch-delete, and one-click backup.
+An in-panel **asset manager** for ComfyUI that auto-archives every image, video, and audio asset you generate — browse, search, preview, batch-delete, and one-click backup.
 
-集成进 ComfyUI 网页的**资产管理面板**，自动归档你跑出的每一张图/视频，随取随用、可搜索、可批量删除、可一键备份。
+集成进 ComfyUI 网页的**资产管理面板**，自动归档生成的图片、视频和音频，支持浏览、搜索、预览、批量删除和一键备份。
 
 ## ✨ Features · 功能亮点
 
-- **Auto-archive** — a background thread watches the output directory and archives every asset instantly (on first run it also imports the assets already in the output directory), extracting **prompt / positive-negative / params (seed, steps, sampler…) / models & LoRA / full workflow** metadata (reads PNG/WebP embedded metadata and MP4/WebM ffmpeg metadata).<br>
-  **自动归档** — 后台线程自动监视输出目录，新产物即时入库（首次运行也会归档 output 目录里已有的产物），并提取**提示词 / 正负词 / 参数(seed/steps/采样器…) / 模型与 LoRA / 完整工作流**元数据（读 PNG/WebP 内嵌元数据、MP4/WebM 的 ffmpeg 元数据）。
-- **Dual views** — grid view + **calendar view** (grouped by date, with daily image/video count badges; click a day to see that day's assets).<br>
-  **双视图浏览** — 网格视图 + **日历视图**（按日期归档，每天显示图/视频数量徽标，点某天看当天产物）。
-- **Search & filter** — full-text search by prompt/model/filename/date; filter by image/video.<br>
-  **搜索与过滤** — 按提示词/模型/文件名/日期全文搜索，按图片/视频过滤。
-- **Preview & reproduce** — view full-size images / play videos, copy prompt, download `workflow.json` (drag it back onto the canvas to restore the whole workflow).<br>
-  **预览与复现** — 点开看大图/播视频、复制提示词、下载 workflow.json（拖回画布还原整套工作流）。
+- **Auto-archive** — a background thread watches the output directory and archives every image, video, and audio asset (on first run it can also import existing files), extracting **prompt / positive-negative / params / models & LoRA / full workflow** where available. It reads image/video container metadata and uses ComfyUI execution history as a fallback; audio metadata and duration are read with PyAV when available.<br>
+  **自动归档** — 后台线程监视 output 目录并归档图片、视频和音频（可选择导入已有文件），尽可能提取**提示词 / 正负词 / 参数 / 模型与 LoRA / 完整工作流**。读取图片/视频容器元数据，并可回查 ComfyUI 执行记录；PyAV 可用时也会读取音频元数据和时长。
+- **Dual views** — grid view + **calendar view** (grouped by date, with daily image/video/audio count badges; click a day to see that day's assets).<br>
+  **双视图浏览** — 网格视图 + **日历视图**（按日期归档，每天显示图片/视频/音频数量徽标，点某天看当天产物）。
+- **Search & filter** — full-text search by prompt/model/filename/date; filter by image/video/audio.<br>
+  **搜索与过滤** — 按提示词/模型/文件名/日期全文搜索，可按图片/视频/音频过滤。
+- **Preview & reproduce** — view full-size images, play videos and audio, copy prompt, download `workflow.json` (drag it back onto the canvas to restore the whole workflow).<br>
+  **预览与复现** — 查看大图、播放视频和音频、复制提示词、下载 workflow.json（拖回画布还原整套工作流）。
 - **Batch delete** — multi-select and delete from disk in one click (archive copy + original output file); single delete too.<br>
   **批量删除** — 多选勾选后一键从硬盘删除（归档副本 + output 原始文件），单个删除也可。
 - **Live refresh** — the panel auto-syncs every 8 seconds; files manually copied into the output directory get archived, and manual deletions disappear automatically.<br>
@@ -65,17 +65,20 @@ git clone https://github.com/Wumihaze/ComfyUI-AssetManager.git
 Download the repo zip and extract it into `ComfyUI/custom_nodes/`, keeping the folder name `ComfyUI-AssetManager`.<br>
 下载本仓库 zip，解压到 `ComfyUI/custom_nodes/` 下，目录名保持 `ComfyUI-AssetManager`。
 
-> Dependencies: Python ≥ 3.9 and `Pillow` (bundled with ComfyUI). Video metadata extraction and thumbnails require `ffmpeg`/`ffprobe` (bundled with the portable ComfyUI, or on system PATH, or specified in `config.json`).<br>
-> 依赖：Python ≥ 3.9，`Pillow`（ComfyUI 已自带）。视频元数据提取与缩略图需要 `ffmpeg`/`ffprobe`（ComfyUI 便携版自带；也可在系统 PATH 里，或在 `config.json` 里指定路径）。
+> Dependencies: Python ≥ 3.9, `Pillow`, and PyAV (`av>=10.0.0`). Audio archiving and browser playback still work if PyAV is unavailable, but embedded audio metadata/duration and video thumbnails will be unavailable.<br>
+> 依赖：Python ≥ 3.9、`Pillow` 和 PyAV（`av>=10.0.0`）。即使 PyAV 不可用，音频仍可归档和在浏览器播放，但无法读取音频容器元数据/时长或生成视频缩略图。
 
 ## 🚀 Usage · 使用
 
 1. Start ComfyUI and click "**Asset Manager**" in the top menu bar to open the panel.<br>
    启动 ComfyUI，顶部菜单栏点「**资产管理**」打开面板。
-2. Top toolbar: search box, grid/calendar toggle, all/image/video filter, multi-select, backup, scan, settings.<br>
-   顶部工具栏：搜索框、网格/日历切换、全部/图片/视频过滤、多选、备份、扫描、资产设置。
-3. Click an asset → preview dialog: copy prompt / download workflow.json (drag back to canvas to reproduce) / delete from disk.<br>
-   点产物 → 预览弹窗：复制提示词 / 下载 workflow.json（拖回画布复现）/ 从硬盘删除。
+2. Top toolbar: search box, grid/calendar toggle, all/image/video/audio filter, multi-select, backup, scan, settings.<br>
+   顶部工具栏：搜索框、网格/日历切换、全部/图片/视频/音频过滤、多选、备份、扫描、资产设置。
+3. Click an asset → preview dialog: play audio/video, copy prompt / download workflow.json (drag back to canvas to reproduce) / delete from disk.<br>
+   点产物 → 预览弹窗：播放音频/视频、复制提示词 / 下载 workflow.json（拖回画布复现）/ 从硬盘删除。
+
+Audio files are auto-archived for `.wav`, `.mp3`, `.flac`, `.ogg`, `.opus`, `.m4a`, `.aac`, `.aiff`, `.aif`, and `.wma`. Playback uses the browser's native audio player, so actual playback depends on the browser's codec support. Audio metadata and duration are best-effort when PyAV is installed; if metadata is absent, ComfyUI execution history is queried for the prompt/workflow.<br>
+音频自动归档支持 `.wav`、`.mp3`、`.flac`、`.ogg`、`.opus`、`.m4a`、`.aac`、`.aiff`、`.aif` 和 `.wma`。预览使用浏览器原生播放器，具体能否播放取决于浏览器支持的编码格式。安装 PyAV 时会尽力读取音频元数据和时长；文件没有提示词时会尝试从 ComfyUI 执行记录回查提示词/工作流。
 
 ## ⚙️ Configuration · 配置
 
@@ -92,9 +95,25 @@ A `config.json` is generated on your first settings save (template at [`config.e
 | `thumb_width` | Thumbnail width (px) / 缩略图宽度(px) |
 | `interval_sec` | Archive scan interval (seconds) / 归档扫描间隔(秒) |
 
-> ℹ️ 从 v1.0.4 起，视频元数据与缩略图改用 **PyAV** 在进程内完成，不再需要 ffmpeg/ffprobe，
-> 因此配置里也**不再有** `ffprobe` / `ffmpeg` 两项。若你之前的 `config.json` 里还留着这两项，
-> 可以直接删除（插件会忽略它们）。
+> ℹ️ 视频元数据/缩略图以及音频元数据读取使用 **PyAV** 在进程内完成，不会启动 ffmpeg/ffprobe 外部进程。
+> 如果 PyAV 不可用，仍可归档和播放音频，但无法提取容器元数据/时长或生成视频缩略图。
+
+### 📍 安装位置与盘符 · Install location
+
+代码里**没有任何写死的盘符或绝对路径**，三个目录都在运行时确定：
+
+- 插件位置：`BASE_DIR = dirname(__file__)` —— 装在哪个盘、哪个目录，就以哪里为准；
+- 默认归档/备份：`<ComfyUI>/asset_archive`、`<ComfyUI>/asset_backups`（由插件目录 `../..` 推导）；
+- 默认输出：`folder_paths.get_output_directory()`，即 ComfyUI 自己探测到的 output。
+
+三个目录都可在面板「⚙ 资产设置」里改成任意位置（**由用户自主选择**）。若 `config.json` 里残留了
+另一台机器或已移除盘符的路径，插件启动时会自动回退到上面的默认目录，并通过 `/asset/config` 的
+`warnings` 字段说明原因——不会因为一个坏路径导致插件加载失败。
+
+No drive letter or absolute path is hardcoded. `BASE_DIR` comes from `__file__`, the default archive/backup
+directories are derived from the plugin location, and the output directory comes from `folder_paths`. All three
+are user-configurable in settings; if a configured path is unavailable (e.g. the plugin was copied from another
+machine), the plugin falls back to the defaults and reports the reason via `warnings` instead of failing to load.
 
 ## 📁 Directory structure · 归档目录结构
 
@@ -141,19 +160,33 @@ carry their prompt.
 本插件从 **v1.0.4** 起按 Comfy Registry 的安全标准收紧了输入面（此前版本因
 `policy-v0.5 command-injection` / `policy-v0.2 ARBITRARY_FILE_LAUNCH` 被标记，相关修复见下）：
 
-- **不启动任何外部进程**：视频元数据读取与缩略图生成改用 **PyAV 在进程内**完成，
+- **不启动任何外部进程**：视频元数据/缩略图及音频元数据读取由 **PyAV 在进程内**完成，
   代码中**已无 `subprocess` / `os.system` / `eval` / `exec`**，从根上消除了命令注入面。
-  配置里也移除了 `ffprobe` / `ffmpeg` 两项。
+  音频播放由浏览器原生播放器完成。
 - **配置写入白名单**：`/asset/set_config` 只接受固定的可配置键，任何未知字段都会被拒绝
   并在响应 `errors` 中说明，不会再被写进运行时配置。
 - **数值与类型校验**：数值项有上下限；布尔项必须是真正的布尔值。
 - **路径沙箱**：媒体文件读取、工作流下载、目录浏览都限制在 output / archive / backup 目录范围内；
   删除等写操作会校验目标仍在归档目录内（防目录穿越）。
+- **媒体接口只服务登记文件**（v1.0.6 起）：`/asset/file` 不再"凡在归档目录内就返回"，
+  而是要求路径形如 `<日期>/<任务>/<文件名>`，且文件名必须出现在该任务的 `info.json`
+  （`media` / `thumb` / `workflow.json`）里；`info.json`、状态文件、任意本机绝对路径一律 404。
+- **目录互不重叠**：配置与输出目录切换都会校验 output / archive / backup 三者互不包含，
+  避免"归档被当成新产物再次归档"的递归增长，也避免备份把自身打进 ZIP。
+- **不跟随符号链接**：扫描、归档、列表、备份都会跳过符号链接并校验解析后仍在根目录内，
+  防止有人借链接把根目录外的文件复制进归档或备份。
+- **备份原子化**：备份先写唯一临时文件再原子改名（时间戳精确到微秒 + 随机后缀），
+  同一秒并发备份不会互相覆盖。
+- **目录浏览最小化**：在允许根的父级链上只列出"通往允许根"的那一级目录名，
+  不泄露同级无关目录；隐藏项与符号链接不列出。
 
 No external process is ever launched: video metadata and thumbnails are handled in-process with
 PyAV, and the codebase contains no `subprocess` / `os.system` / `eval` / `exec`. Configuration keys
 are written through a strict allowlist, numeric options are range-checked, and all file/directory
-access is confined to the configured output / archive / backup roots.
+access is confined to the configured output / archive / backup roots. Since v1.0.6 the media route
+serves only manifest-listed files, the three roots are mutually non-overlapping, symlinks are
+skipped and re-validated after resolution, backups are written atomically to unique files, and
+directory browsing only reveals entries on the path to an allowed root.
 
 ## 📄 License
 

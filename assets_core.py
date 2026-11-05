@@ -9,7 +9,9 @@ ComfyUI 资产管理插件核心库
 import json
 import os
 import shutil
+import stat
 import time
+import uuid
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -22,7 +24,8 @@ except Exception:
 
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".mkv", ".gif"}
-ALL_EXT = IMAGE_EXT | VIDEO_EXT
+AUDIO_EXT = {".wav", ".mp3", ".flac", ".ogg", ".opus", ".m4a", ".aac", ".aiff", ".aif", ".wma"}
+ALL_EXT = IMAGE_EXT | VIDEO_EXT | AUDIO_EXT
 NEG_HINTS = ("negative", "neg prompt", "neg", "负")
 
 # ---------------------------------------------------------------------------
@@ -70,7 +73,7 @@ NUMERIC_LIMITS = {
 def load_config(base_dir):
     """读取配置。
 
-    安全约束: 只接受已知键(与 DEFAULT_CONFIG 取交集), 忽略任何未知/注入字段。
+    安全约束: 只接受已知键，并验证路径、布尔值和数值类型/范围；忽略未知或格式错误字段。
     配置里已不含任何可执行文件路径, 因此不存在"配置 -> 执行外部程序"的链路。
     """
     cfg = dict(DEFAULT_CONFIG)
@@ -79,9 +82,17 @@ def load_config(base_dir):
         try:
             user = json.loads(fp.read_text(encoding="utf-8"))
             if isinstance(user, dict):
+                path_keys = {"output_dir", "archive_dir", "backup_dir"}
+                boolean_keys = {"auto_archive", "archive_existing"}
                 for k, v in user.items():
-                    if k in DEFAULT_CONFIG:
+                    if k in path_keys and isinstance(v, str):
                         cfg[k] = v
+                    elif k in boolean_keys and isinstance(v, bool):
+                        cfg[k] = v
+                    elif k in NUMERIC_LIMITS and isinstance(v, int) and not isinstance(v, bool):
+                        lo, hi = NUMERIC_LIMITS[k]
+                        if lo <= v <= hi:
+                            cfg[k] = v
         except Exception:
             pass
     return cfg
@@ -110,6 +121,39 @@ def save_state(archive_dir, state):
     tmp = Path(str(fp) + ".tmp")
     tmp.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
     os.replace(tmp, fp)
+
+
+def path_is_within(path, root):
+    """Return whether the resolved path is equal to or below root."""
+    try:
+        Path(path).resolve().relative_to(Path(root).resolve())
+        return True
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return False
+
+
+def paths_overlap(path_a, path_b):
+    """Return True when either resolved directory contains the other."""
+    return path_is_within(path_a, path_b) or path_is_within(path_b, path_a)
+
+
+def ensure_dir(path, *fallbacks):
+    """Return the first usable directory, creating it when needed.
+
+    路径完全由运行时决定: 配置里的路径可能来自另一台机器(盘符不存在)或已被移动,
+    这里逐个尝试并在失败时回退到调用方给出的默认目录, 避免插件因一个坏路径而无法加载。
+    """
+    for candidate in (path,) + fallbacks:
+        if not candidate:
+            continue
+        try:
+            p = Path(candidate).expanduser()
+            p.mkdir(parents=True, exist_ok=True)
+            if p.is_dir():
+                return str(p)
+        except (OSError, ValueError):
+            continue
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +231,31 @@ def extract_video_metadata(path, cfg):
     return prompt, workflow
 
 
+def extract_audio_metadata(path):
+    """读取音频容器元数据与时长, 不启动外部进程。
+
+    PyAV 为可选依赖: 不可用或格式不支持时仍会归档并可在浏览器中播放文件;
+    提示词和工作流可由 ComfyUI 执行历史兜底找回。
+    """
+    try:
+        import av
+    except Exception:
+        return None, None, None
+    try:
+        with av.open(str(path)) as container:
+            md = dict(container.metadata or {})
+            duration = None
+            if container.duration is not None:
+                duration = float(container.duration) / float(av.time_base)
+            elif container.streams.audio:
+                stream = container.streams.audio[0]
+                if stream.duration is not None and stream.time_base is not None:
+                    duration = float(stream.duration * stream.time_base)
+    except Exception:
+        return None, None, None
+    return md.get("prompt"), md.get("workflow"), duration
+
+
 def parse_prompt_graph(graph):
     texts, params, models, seeds = [], {}, {}, []
     if not isinstance(graph, dict):
@@ -195,7 +264,8 @@ def parse_prompt_graph(graph):
         if not isinstance(node, dict):
             continue
         cls = node.get("class_type") or ""
-        meta = node.get("_meta") or {}
+        meta = node.get("_meta")
+        meta = meta if isinstance(meta, dict) else {}
         title = meta.get("title") or cls
         inputs = node.get("inputs") or {}
         if not isinstance(inputs, dict):
@@ -207,6 +277,7 @@ def parse_prompt_graph(graph):
             kk = k.lower()
             looks_path = any(x in v for x in (".safetensors", ".ckpt", ".gguf", ".sft", ".onnx", ".pth", ".pt", ".bin"))
             looks_text = (kk in ("text", "prompt", "value", "positive", "negative",
+                                 "caption", "lyrics", "style", "abc", "song_prompt",
                                  "conditioned_prompt", "integrated_multimodal_description")
                           or ("text" in kk or "prompt" in kk))
             if looks_text and not looks_path and len(v) < 100000:
@@ -292,19 +363,40 @@ def make_video_thumb(src, dst, cfg):
     return None
 
 
-def archive_file(rel, src, archive_dir, state, cfg, prompt_resolver=None):
-    st = os.stat(src)
+def archive_file(rel, src, archive_dir, state, cfg, prompt_resolver=None, source_root=None):
+    src = Path(src)
+    try:
+        st = src.lstat()
+        if not stat.S_ISREG(st.st_mode) or src.is_symlink():
+            return None
+        resolved_src = src.resolve(strict=True)
+        if source_root is not None and not path_is_within(resolved_src, source_root):
+            return None
+        src = resolved_src
+        st = src.stat()
+    except (OSError, RuntimeError):
+        return None
     state_key = {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
     if state.get(rel) == state_key:
         return None
     ext = Path(rel).suffix.lower()
-    kind = "video" if ext in VIDEO_EXT else "image"
+    if ext in IMAGE_EXT:
+        kind = "image"
+    elif ext in VIDEO_EXT:
+        kind = "video"
+    elif ext in AUDIO_EXT:
+        kind = "audio"
+    else:
+        return None
     arch = Path(archive_dir)
+    media_duration = None
 
     if kind == "image":
         prompt_raw, workflow_raw = extract_image_metadata(src)
-    else:
+    elif kind == "video":
         prompt_raw, workflow_raw = extract_video_metadata(src, cfg)
+    else:
+        prompt_raw, workflow_raw, media_duration = extract_audio_metadata(src)
 
     # 文件里没有元数据时, 从 ComfyUI 服务端执行历史按文件名找回
     # (覆盖: 外部拖进来的图 / --disable-metadata / 不写元数据的保存节点)
@@ -374,6 +466,7 @@ def archive_file(rel, src, archive_dir, state, cfg, prompt_resolver=None):
         "media": media_name,
         "kind": kind,
         "file_size": st.st_size,
+        "media_duration": media_duration,
         "positive": parsed["positive"],
         "negative": parsed["negative"],
         "prompt_nodes": parsed["texts"],
@@ -391,7 +484,7 @@ def archive_file(rel, src, archive_dir, state, cfg, prompt_resolver=None):
 
     lines = ["=== ComfyUI 产物信息 ===",
              f"来源: {rel}", f"生成时间: {info['generated_at']}",
-             f"类型: {'视频' if kind == 'video' else '图片'}",
+             f"类型: { {'image': '图片', 'video': '视频', 'audio': '音频'}[kind] }",
              f"大小: {st.st_size / 1024:.0f} KB"]
     if parsed["models"]:
         lines.append("模型/LoRA: " + ", ".join(parsed["models"]))
@@ -411,25 +504,36 @@ def archive_file(rel, src, archive_dir, state, cfg, prompt_resolver=None):
 
 
 def scan_all(output_dir, archive_dir, state, cfg, prompt_resolver=None):
-    out = Path(output_dir)
-    if not out.is_dir():
+    out = Path(output_dir).resolve()
+    arch = Path(archive_dir).resolve()
+    if not out.is_dir() or paths_overlap(out, arch):
         return 0
     new_runs = []
     state_changed = False
     archive_existing = bool(cfg.get("archive_existing", False))
     baseline_done = bool(state.get("__baseline_done__", False))
-    for root, dirs, files in os.walk(out):
-        dirs[:] = [d for d in dirs if not d.startswith(".")]
+    for root, dirs, files in os.walk(out, followlinks=False):
+        root_path = Path(root)
+        dirs[:] = [
+            d for d in dirs
+            if not d.startswith(".")
+            and not (root_path / d).is_symlink()
+            and path_is_within(root_path / d, out)
+        ]
         for fn in files:
             if fn.startswith("."):
                 continue
             if Path(fn).suffix.lower() not in ALL_EXT:
                 continue
-            src = Path(root) / fn
+            src = root_path / fn
             rel = src.relative_to(out).as_posix()
             try:
-                st = os.stat(src)
-            except OSError:
+                st = src.lstat()
+                if not stat.S_ISREG(st.st_mode) or src.is_symlink():
+                    continue
+                if not path_is_within(src.resolve(strict=True), out):
+                    continue
+            except (OSError, RuntimeError):
                 continue
             cur_key = {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
             if state.get(rel) == cur_key:
@@ -452,12 +556,12 @@ def scan_all(output_dir, archive_dir, state, cfg, prompt_resolver=None):
                 continue
             if rel in state:
                 # 已记录过(归档过或基线过), 文件有变化 → 归档新版本
-                r = archive_file(rel, src, archive_dir, state, cfg, prompt_resolver)
+                r = archive_file(rel, src, archive_dir, state, cfg, prompt_resolver, source_root=out)
                 if r:
                     new_runs.append(r)
             elif baseline_done or archive_existing:
                 # 基线已建立后的新文件, 或用户开启"归档历史" → 归档
-                r = archive_file(rel, src, archive_dir, state, cfg, prompt_resolver)
+                r = archive_file(rel, src, archive_dir, state, cfg, prompt_resolver, source_root=out)
                 if r:
                     new_runs.append(r)
             else:
@@ -477,37 +581,62 @@ def scan_all(output_dir, archive_dir, state, cfg, prompt_resolver=None):
 # ---------------------------------------------------------------------------
 
 def list_runs(archive_dir):
-    arch = Path(archive_dir)
+    arch = Path(archive_dir).resolve()
     runs = []
     if not arch.is_dir():
         return runs
     for date_dir in arch.iterdir():
-        if not date_dir.is_dir():
+        if date_dir.is_symlink() or not date_dir.is_dir() or not path_is_within(date_dir, arch):
             continue
         for run_dir in date_dir.iterdir():
+            if run_dir.is_symlink() or not run_dir.is_dir() or not path_is_within(run_dir, arch):
+                continue
             info_file = run_dir / "info.json"
-            if not info_file.is_file():
+            if info_file.is_symlink() or not info_file.is_file() or not path_is_within(info_file, arch):
                 continue
             try:
                 info = json.loads(info_file.read_text(encoding="utf-8"))
             except Exception:
                 continue
+            if not isinstance(info, dict):
+                continue
+            generated_at = info.get("generated_at")
+            media = info.get("media")
+            if not isinstance(generated_at, str) or not isinstance(media, str):
+                continue
+            if (Path(media).name != media or media in (".", "..")
+                    or "/" in media or chr(92) in media):
+                continue
+            kind = info.get("kind")
+            if kind not in ("image", "video", "audio"):
+                kind = "image"
+            thumb = info.get("thumb")
+            if not isinstance(thumb, str) or Path(thumb).name != thumb:
+                thumb = None
+            models = info.get("models")
+            if not isinstance(models, list):
+                models = []
+            models = [model for model in models if isinstance(model, str)]
+            params = info.get("params")
+            if not isinstance(params, dict):
+                params = {}
             runs.append({
-                "id": info.get("run_id") or run_dir.name,
-                "date": (info.get("generated_at") or "")[:10],
-                "time": info.get("generated_at") or "",
-                "name": info.get("source_rel") or run_dir.name,
-                "kind": info.get("kind") or "image",
-                "media": info.get("media"),
-                "thumb": info.get("thumb"),
+                "id": run_dir.name,
+                "date": generated_at[:10],
+                "time": generated_at,
+                "name": info.get("source_rel") if isinstance(info.get("source_rel"), str) else run_dir.name,
+                "kind": kind,
+                "media": media,
+                "media_duration": info.get("media_duration") if isinstance(info.get("media_duration"), (int, float)) else None,
+                "thumb": thumb,
                 "dir": run_dir.relative_to(arch).as_posix(),
-                "positive": info.get("positive") or "",
-                "negative": info.get("negative") or "",
-                "models": info.get("models") or [],
-                "params": info.get("params") or {},
+                "positive": info.get("positive") if isinstance(info.get("positive"), str) else "",
+                "negative": info.get("negative") if isinstance(info.get("negative"), str) else "",
+                "models": models,
+                "params": params,
                 "has_workflow": bool(info.get("has_workflow")),
-                "prompt_source": info.get("prompt_source") or "file",
-                "no_prompt_reason": info.get("no_prompt_reason") or "",
+                "prompt_source": info.get("prompt_source") if isinstance(info.get("prompt_source"), str) else "file",
+                "no_prompt_reason": info.get("no_prompt_reason") if isinstance(info.get("no_prompt_reason"), str) else "",
             })
     runs.sort(key=lambda r: r.get("time") or "", reverse=True)
     return runs
@@ -523,7 +652,7 @@ def delete_run(archive_dir, output_dir, state, run_id):
     if not run_id or not isinstance(run_id, str):
         return {"ok": False, "error": "Missing run_id"}
     run_dir = (arch / run_id).resolve()
-    if run_dir == arch or not str(run_dir).startswith(str(arch) + os.sep):
+    if run_dir == arch or not path_is_within(run_dir, arch):
         return {"ok": False, "error": "Invalid archive path"}
     info_file = run_dir / "info.json"
     if not (run_dir.is_dir() and info_file.is_file()):
@@ -531,14 +660,15 @@ def delete_run(archive_dir, output_dir, state, run_id):
     source_rel = None
     try:
         info = json.loads(info_file.read_text(encoding="utf-8"))
-        source_rel = info.get("source_rel")
+        if isinstance(info, dict) and isinstance(info.get("source_rel"), str):
+            source_rel = info["source_rel"]
     except Exception:
         pass
     shutil.rmtree(run_dir)
     if source_rel and out:
-        src = (out / source_rel).resolve()
-        # 防穿越: source_rel 必须解析后仍位于 output 目录内
-        if str(src).startswith(str(out) + os.sep) and src.is_file():
+        src = out / source_rel
+        # Never follow a source symlink during deletion, and keep the resolved target under output.
+        if not src.is_symlink() and src.is_file() and path_is_within(src, out):
             try:
                 src.unlink()
             except Exception:
@@ -560,35 +690,61 @@ def default_asset_dirs(base_dir):
 
 def backup_assets(cfg, base_dir, workflow_dirs=None):
     _arch_default, _bak_default = default_asset_dirs(base_dir)
-    archive_dir = Path(cfg.get("archive_dir") or _arch_default)
-    backup_dir = Path(cfg.get("backup_dir") or _bak_default)
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    zip_path = backup_dir / f"ComfyUI_asset_backup_{stamp}.zip"
-    workflow_dirs = workflow_dirs or []
+    archive_dir = Path(cfg.get("archive_dir") or _arch_default).resolve()
+    configured_backup = Path(cfg.get("backup_dir") or _bak_default).resolve()
+    workflow_dirs = [Path(p).resolve() for p in (workflow_dirs or []) if p]
+    source_roots = [archive_dir] + workflow_dirs
+    if any(paths_overlap(configured_backup, root) for root in source_roots):
+        return {"ok": False, "error": "Backup directory must not overlap a backup source"}
+
+    # 配置的备份目录可能位于已移除的盘符/只读位置: 回退到默认目录, 不让备份直接失败
+    usable_backup = ensure_dir(str(configured_backup), _bak_default)
+    if not usable_backup:
+        return {"ok": False, "error": "No writable backup directory available"}
+    backup_dir = Path(usable_backup)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    unique = uuid.uuid4().hex[:8]
+    zip_name = f"ComfyUI_asset_backup_{stamp}_{unique}.zip"
+    zip_path = backup_dir / zip_name
+    temp_path = backup_dir / f".{zip_name}.tmp"
 
     def _add(zf, root, arcname):
-        root = Path(root)
-        if not root.exists():
+        root = Path(root).resolve()
+        if not root.exists() or not root.is_dir():
             return 0
         n = 0
         for f in root.rglob("*"):
-            if f.is_file():
+            try:
+                if f.is_symlink():
+                    continue
+                resolved = f.resolve(strict=True)
+                if not path_is_within(resolved, root) or not resolved.is_file():
+                    continue
                 rel = f.relative_to(root).as_posix()
-                zf.write(f, f"{arcname}/{rel}")
+                zf.write(resolved, f"{arcname}/{rel}")
                 n += 1
+            except (OSError, RuntimeError, ValueError):
+                continue
         return n
 
     total = 0
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        total += _add(zf, archive_dir, "assets")
-        for i, wd in enumerate(workflow_dirs):
-            if wd:
+    try:
+        with zipfile.ZipFile(temp_path, "x", zipfile.ZIP_DEFLATED) as zf:
+            total += _add(zf, archive_dir, "assets")
+            for i, wd in enumerate(workflow_dirs):
                 total += _add(zf, wd, f"workflows_{i}")
-        cfg_file = Path(base_dir) / "config.json"
-        if cfg_file.is_file():
-            zf.write(cfg_file, "config.json")
-            total += 1
+            cfg_file = Path(base_dir).resolve() / "config.json"
+            if cfg_file.is_file() and not cfg_file.is_symlink() and path_is_within(cfg_file, base_dir):
+                zf.write(cfg_file, "config.json")
+                total += 1
+        os.replace(temp_path, zip_path)
+    except Exception:
+        try:
+            temp_path.unlink()
+        except OSError:
+            pass
+        raise
+
     size = zip_path.stat().st_size
     return {"ok": True, "file": str(zip_path), "name": zip_path.name,
             "size": size, "files": total}
@@ -598,12 +754,41 @@ def backup_assets(cfg, base_dir, workflow_dirs=None):
 # 媒体文件安全读取
 # ---------------------------------------------------------------------------
 
-def safe_media_path(archive_dir, rel):
-    """校验 rel 在 archive_dir 内且为文件, 返回 Path 或 None"""
+def safe_media_path(archive_dir, rel, workflow_only=False):
+    """Return only manifest-listed files from an archive run."""
     arch = Path(archive_dir).resolve()
-    p = (arch / rel).resolve()
-    if not str(p).startswith(str(arch) + os.sep):
+    try:
+        p = (arch / rel).resolve(strict=True)
+        parts = p.relative_to(arch).parts
+    except (OSError, RuntimeError, ValueError, TypeError):
         return None
-    if not p.is_file():
+    if len(parts) != 3 or not p.is_file():
+        return None
+
+    date_dir = arch / parts[0]
+    run_dir = date_dir / parts[1]
+    info_file = run_dir / "info.json"
+    if (date_dir.is_symlink() or run_dir.is_symlink() or info_file.is_symlink()
+            or not info_file.is_file() or not path_is_within(info_file, arch)):
+        return None
+    try:
+        info = json.loads(info_file.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(info, dict):
+        return None
+
+    if workflow_only:
+        allowed = {"workflow.json"} if info.get("has_workflow") is True else set()
+    else:
+        allowed = set()
+        for key in ("media", "thumb"):
+            name = info.get(key)
+            if (isinstance(name, str) and name not in (".", "..")
+                    and "/" not in name and chr(92) not in name):
+                allowed.add(name)
+        if info.get("has_workflow") is True:
+            allowed.add("workflow.json")
+    if parts[2] not in allowed:
         return None
     return p
