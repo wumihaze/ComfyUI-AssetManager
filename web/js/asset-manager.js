@@ -105,6 +105,7 @@ const STYLE = `
 .asm-card .meta { padding:7px 9px; }
 .asm-card .nm { font-size:11px; color:var(--descrip-text,#aaa); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .asm-card .pr { font-size:11px; color:var(--fg-color,#eee); height:2.2em; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.asm-card .pr.note { color:#d0b070; font-style:italic; }
 .asm-card .mo { font-size:10px; color:#5b8cff; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .asm-empty { color:var(--descrip-text,#aaa); text-align:center; padding:50px 0; }
 /* 日历 */
@@ -279,6 +280,13 @@ app.registerExtension({
       "🗑 从硬盘删除": "🗑 Delete from disk",
       "💡 下载 workflow.json 后拖进 ComfyUI 画布, 即可完整还原整套工作流(节点+连线)。": "💡 Drag the downloaded workflow.json onto the ComfyUI canvas to fully restore the workflow (nodes + links).",
       "已复制": "Copied",
+      "备注": "Note",
+      "备注：": "Note: ",
+      "保存备注": "Save note",
+      "给这条资产加一句备注(写进 info.json, 可被搜索)": "Add a note to this asset (stored in info.json, searchable)",
+      "备注已保存": "Note saved",
+      "备注已清除": "Note cleared",
+      "保存失败: ": "Save failed: ",
       "该产物未携带 workflow 元数据": "This asset has no workflow metadata",
       "下载失败": "Download failed",
       "已从硬盘删除": "Deleted from disk",
@@ -335,6 +343,15 @@ app.registerExtension({
       "Assign failed": "移动分类失败（归档目录可能不可写）",
       "Only one level of nesting is supported": "只支持一层子分类",
       "Parent category not found": "父分类不存在",
+      "run_id must be a string": "run_id 必须是字符串",
+      "note must be a string": "备注必须是字符串",
+      "note too long (max 500)": "备注太长（最多 500 字）",
+      "invalid path": "非法的归档路径",
+      "missing info.json": "该条目缺少 info.json",
+      "unreadable info.json": "info.json 读不出来",
+      "invalid info.json": "info.json 格式不对",
+      "Cannot write note": "备注写入失败（归档目录可能不可写）",
+      "Note failed": "备注保存失败",
     };
     function terr(en) { return LANG === "zh" ? (ERR_L10N[en] || en) : en; }
     detectLang();
@@ -406,7 +423,7 @@ app.registerExtension({
 
     function matches(r, kw) {
       kw = kw.toLowerCase();
-      return ((r.positive + " " + (r.negative || "") + " " + (r.models || []).join(" ") + " " + r.name + " " + (r.date || "")).toLowerCase()).includes(kw);
+      return ((r.positive + " " + (r.negative || "") + " " + (r.note || "") + " " + (r.models || []).join(" ") + " " + r.name + " " + (r.date || "")).toLowerCase()).includes(kw);
     }
     // 分类是两层树: 选中父分类时, 其子分类下的产物也算在这个范围里(像文件夹一样)
     function catIdsFor(id) {
@@ -694,7 +711,10 @@ app.registerExtension({
       card.appendChild($el("div.meta", {}, [
         categoryName(r) ? $el("div.cat", { textContent: categoryName(r) }) : null,
         $el("div.nm", { textContent: r.name }),
-        $el("div.pr", { textContent: (r.positive || "").slice(0, 160) || t("(未检测到提示词)") }),
+        $el("div.pr" + (r.positive ? "" : ".note"), {
+          textContent: (r.positive || "").slice(0, 160)
+            || (r.note ? t("备注：") + r.note.slice(0, 160) : t("(未检测到提示词)")),
+        }),
         r.models && r.models.length ? $el("div.mo", { textContent: r.models.join(" · ") }) : null,
       ].filter(Boolean)));
       card.onclick = (ev) => {
@@ -1377,6 +1397,33 @@ app.registerExtension({
       const ph = promptHint(r);
       const models = (r.models || []).join(", ") || "—";
       const params = Object.keys(r.params || {}).map(k => k + "=" + r.params[k]).join(" · ") || "—";
+
+      // 手动备注: 给提不出提示词的产物(网图/截图/转存图)补一句自己的说明。
+      // 只写归档目录的 info.json, 不动媒体文件; 会参与搜索匹配。
+      const noteTa = $el("textarea", { textContent: r.note || "", rows: 2 });
+      bindText(noteTa, "给这条资产加一句备注(写进 info.json, 可被搜索)", "placeholder");
+      const noteSave = bindText($el("button.asm-btn", {
+        onclick: async () => {
+          noteSave.disabled = true;
+          try {
+            const res = await fetch("/asset/note", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ run_id: r.dir, note: noteTa.value }),
+            });
+            const d = await res.json();
+            if (!d.ok) { statusMsg(t("保存失败: ") + (terr(d.error) || t("未知错误"))); return; }
+            r.note = d.note || "";
+            noteTa.value = r.note;
+            statusMsg(r.note ? t("备注已保存") : t("备注已清除"));
+            refresh();
+          } catch (e) {
+            statusMsg(t("保存失败: ") + t("未知错误"));
+          } finally {
+            noteSave.disabled = false;
+          }
+        },
+      }), "保存备注");
+
       const pn = $el("div.pn.preview", {}, [
         closeX(m),
         media,
@@ -1389,6 +1436,9 @@ app.registerExtension({
         bindText($el("label", { style: { fontSize: "12px" } }), "提示词"),
         ta,
         ...(ph ? [ph] : []),
+        bindText($el("label", { style: { fontSize: "12px", display: "block", marginTop: "10px" } }), "备注"),
+        noteTa,
+        $el("div.btns", { style: { marginTop: "6px" } }, [noteSave]),
         $el("div.btns", {}, [
           bindText($el("button.asm-btn", { onclick: () => { ta.select(); navigator.clipboard?.writeText(ta.value).then(() => statusMsg(t("已复制"))); } }), "复制提示词"),
           bindText($el("button.asm-btn.primary", { onclick: () => downloadWorkflow(r) }), "下载 workflow.json"),

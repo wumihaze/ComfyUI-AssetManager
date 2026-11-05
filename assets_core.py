@@ -439,6 +439,52 @@ def assign_category(archive_dir, run_ids, category_id):
     return {"ok": True, "updated": updated, "skipped": skipped}
 
 
+NOTE_MAX = 500
+
+
+def set_run_note(archive_dir, run_id, note):
+    """给一条归档记录写/清手动备注。
+
+    只改 info.json 的 `note` 字段, 不动媒体文件、不动目录结构。
+    用于给"提不出提示词"的产物(网图、截图、别人转存的图)补一句自己的说明,
+    前端会把它算进搜索匹配。空字符串 = 清除备注。
+    """
+    if not isinstance(note, str):
+        return {"ok": False, "error": "note must be a string"}
+    note = note.replace("\r\n", "\n").replace("\r", "\n")
+    # U+2028/2029 是"行分隔符", isprintable() 会把它们判掉, 直接换成普通换行
+    note = note.replace("\u2028", "\n").replace("\u2029", "\n")
+    # 保留换行/制表, 其余控制字符去掉, 免得把面板撑乱
+    note = "".join(ch for ch in note if ch in "\n\t" or ch.isprintable()).strip()
+    if len(note) > NOTE_MAX:
+        return {"ok": False, "error": f"note too long (max {NOTE_MAX})"}
+    run_dir = _run_dir_for(archive_dir, run_id)
+    if not run_dir:
+        return {"ok": False, "error": "invalid path"}
+    info_file = run_dir / "info.json"
+    if info_file.is_symlink() or not info_file.is_file():
+        return {"ok": False, "error": "missing info.json"}
+    try:
+        info = json.loads(info_file.read_text(encoding="utf-8"))
+    except Exception:
+        return {"ok": False, "error": "unreadable info.json"}
+    if not isinstance(info, dict):
+        return {"ok": False, "error": "invalid info.json"}
+    if note:
+        info["note"] = note
+        info["note_updated_at"] = datetime.now().isoformat(timespec="seconds")
+    else:
+        info.pop("note", None)
+        info.pop("note_updated_at", None)
+    tmp = info_file.with_suffix(".json.tmp")
+    try:
+        tmp.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, info_file)
+    except OSError:
+        return {"ok": False, "error": "Cannot write note"}
+    return {"ok": True, "note": note}
+
+
 def path_is_within(path, root):
     """Return whether the resolved path is equal to or below root."""
     try:
@@ -1106,6 +1152,7 @@ def list_runs(archive_dir):
                 "dir": run_dir.relative_to(arch).as_posix(),
                 "positive": info.get("positive") if isinstance(info.get("positive"), str) else "",
                 "negative": info.get("negative") if isinstance(info.get("negative"), str) else "",
+                "note": info.get("note") if isinstance(info.get("note"), str) else "",
                 "models": models,
                 "params": params,
                 "has_workflow": bool(info.get("has_workflow")),

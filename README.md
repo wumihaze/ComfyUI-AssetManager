@@ -10,12 +10,14 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image, video,
   **自动归档** — 后台线程监视 output 目录并归档图片、视频和音频（可选择导入已有文件），尽可能提取**提示词 / 正负词 / 参数 / 模型与 LoRA / 完整工作流**。读取图片/视频容器元数据，并可回查 ComfyUI 执行记录；PyAV 可用时也会读取音频元数据和时长。
 - **Dual views** — grid view + **calendar view** (grouped by date, with daily image/video/audio count badges; click a day to see that day's assets).<br>
   **双视图浏览** — 网格视图 + **日历视图**（按日期归档，每天显示图片/视频/音频数量徽标，点某天看当天产物）。
-- **Search & filter** — full-text search by prompt/model/filename/date; filter by image/video/audio, by **source folder**, or by **your own category**.<br>
-  **搜索与过滤** — 按提示词/模型/文件名/日期全文搜索，可按图片/视频/音频、**自建分类**（两级树）过滤，需要时还能按**来源文件夹**筛。
+- **Search & filter** — full-text search by prompt/note/model/filename/date; filter by image/video/audio, by **source folder**, or by **your own category**.<br>
+  **搜索与过滤** — 按提示词/备注/模型/文件名/日期全文搜索，可按图片/视频/音频、**自建分类**（两级树）过滤，需要时还能按**来源文件夹**筛。
 - **Category tree** — the sidebar is one folder-like tree: create categories, nest one level of sub-categories under them, and multi-select assets to move them in. Selecting a parent includes everything in its sub-categories. Categories can be **pinned to the top** and **reordered** with ↑↓ (per level, pinned ones stay above unpinned ones). Moving only rewrites archive metadata — original files and the archive layout are untouched, so it is easy to undo. A source-folder filter is also available, folded away at the bottom.<br>
   **分类树** — 左侧是一棵像文件夹的树：建分类、在分类下再挂一层子分类、多选产物移进去。选中父分类会把子分类里的产物一并算进来。分类可以**置顶**、用 ↑↓ **调整顺序**（按层级分组，置顶的始终排在未置顶之上）。移动只改归档元数据，不动原始文件、不动归档目录结构，改错了也能改回来；另外还有「来源文件夹」筛选，收在侧栏底部。
 - **Preview & reproduce** — view full-size images, play videos and audio, copy prompt, download `workflow.json` (drag it back onto the canvas to restore the whole workflow).<br>
   **预览与复现** — 查看大图、播放视频和音频、复制提示词、下载 workflow.json（拖回画布还原整套工作流）。
+- **Manual note** — any asset can carry a note you write yourself (up to 500 characters), which comes in handy for downloaded reference images that have no prompt at all: the note shows right on the card and is matched by search. It is stored in the archive's `info.json` only — the media file is never modified — and saving an empty note clears it.<br>
+  **手动备注** — 每条产物都能加一句自己写的备注（最多 500 字），网上下载的参考图本来没有提示词，加上之后卡片上直接显示、也能被搜到。备注只写进归档目录的 `info.json`，不动媒体文件；存空内容即清除。
 - **Batch delete** — multi-select (Ctrl/Shift click or drag a box on empty space) and delete from disk in one go (archive copy + original output file); single delete too.<br>
   **批量删除** — 多选（Ctrl/Shift 点选，或在空白处拖框）后一次性从硬盘删除（归档副本 + output 原始文件），单个删除也可。
 - **Live refresh** — the panel auto-syncs every 8 seconds; files manually copied into the output directory get archived, and manual deletions disappear automatically.<br>
@@ -81,8 +83,8 @@ Download the repo zip and extract it into `ComfyUI/custom_nodes/`, keeping the f
    勾选产物 →「**移到分类**」→ 弹窗把分类列成单选项（这些产物当前所属的分类会标 **当前**），分类多了会显示搜索框，底部单独一条 **未分类（移出分类）**，以及新建并移入。移动只改归档元数据。
 6. **Manage categories** (the gear in the My categories header) → rename (✎), delete (✕), or create. On a top-level row, **＋** adds a sub-category right under it. The pin button **pins a category to the top** (it shows a pin in the sidebar too), and **↑ ↓ reorder** it among its siblings; ordering is per level and per pin state, so a pinned category can't be pushed below an unpinned one by accident. Deleting a category never deletes files: its assets become uncategorized and its sub-categories move up one level.<br>
    分类区标题旁的齿轮按钮 → 重命名（✎）/ 删除（✕）/ 新建。一级分类行上的 **＋** 直接在它下面建子分类。**置顶**（侧栏也会显示图钉），**↑ ↓ 调整顺序**；排序按「同一层 + 同一置顶状态」分组，所以置顶的分类不会被 ↑ 挤到未置顶区里去。删除分类**不会删除文件**：该分类下的产物变回「未分类」，它的子分类上移一层。
-7. Click an asset → preview dialog: play audio/video, copy prompt / download workflow.json (drag back to canvas to reproduce) / delete from disk.<br>
-   点产物 → 预览弹窗：播放音频/视频、复制提示词 / 下载 workflow.json（拖回画布复现）/ 从硬盘删除。
+7. Click an asset → preview dialog: play audio/video, copy prompt / write a note / download workflow.json (drag back to canvas to reproduce) / delete from disk.<br>
+   点产物 → 预览弹窗：播放音频/视频、复制提示词 / 写备注 / 下载 workflow.json（拖回画布复现）/ 从硬盘删除。
 
 Audio files are auto-archived for `.wav`, `.mp3`, `.flac`, `.ogg`, `.opus`, `.m4a`, `.aac`, `.aiff`, `.aif`, and `.wma`. Playback uses the browser's native audio player, so actual playback depends on the browser's codec support. Audio metadata and duration are best-effort when PyAV is installed; if metadata is absent, ComfyUI execution history is queried for the prompt/workflow.<br>
 音频自动归档支持 `.wav`、`.mp3`、`.flac`、`.ogg`、`.opus`、`.m4a`、`.aac`、`.aiff`、`.aif` 和 `.wma`。预览使用浏览器原生播放器，具体能否播放取决于浏览器支持的编码格式。安装 PyAV 时会尽力读取音频元数据和时长；文件没有提示词时会尝试从 ComfyUI 执行记录回查提示词/工作流。
@@ -137,9 +139,9 @@ machine), the plugin falls back to the defaults and reports the reason via `warn
       └─ thumb.jpg                # thumbnail (first frame for videos) / 缩略图(视频取首帧)
 ```
 
-`info.json` also carries `folder` (source subdirectory, auto-derived), `category` (id of your category, or `null`), and — for files under 64 MB — `content_hash` (SHA-256 of the file, used to detect moves/renames).
+`info.json` also carries `folder` (source subdirectory, auto-derived), `category` (id of your category, or `null`), `note` (your own note, when you wrote one), and — for files under 64 MB — `content_hash` (SHA-256 of the file, used to detect moves/renames).
 Older records without these fields are derived on the fly from `source_rel`, so no migration is needed.<br>
-`info.json` 还记录 `folder`（来源子目录，自动派生）、`category`（自建分类 id，未分类为 `null`），以及 64 MB 以内文件的 `content_hash`（文件 SHA-256，用于识别移动/改名）。
+`info.json` 还记录 `folder`（来源子目录，自动派生）、`category`（自建分类 id，未分类为 `null`）、`note`（你写的备注，没写就没有这个字段），以及 64 MB 以内文件的 `content_hash`（文件 SHA-256，用于识别移动/改名）。
 老记录缺少这些字段时由 `source_rel` 即时派生，无需迁移。
 
 `categories.json` keeps each category's `order` and `pinned` flag next to its `id` / `name` / `parent`. Files written by older versions have neither, so their order falls back to the position in the file — no migration needed.<br>
@@ -164,25 +166,26 @@ Older records without these fields are derived on the fly from `source_rel`, so 
 | 照样能用 | 拿不到 |
 |---|---|
 | 缩略图、类型（图片/视频/音频）、文件大小、日期、来源文件名 | 提示词 / 负向提示词 |
-| 按文件名和日期搜索、分类、预览、删除、批量删除 | 模型 / LoRA、采样参数 |
+| 按文件名、日期和**自己写的备注**搜索，分类、预览、删除、批量删除 | 模型 / LoRA、采样参数 |
 | 归档副本（output 被清空也不丢） | `workflow.json`（点下载会提示"该产物未携带 workflow 元数据"） |
 
-卡片上显示「(未检测到提示词)」，预览弹窗里会给出橙色说明，其他功能不受影响。<br>
+卡片上显示「(未检测到提示词)」，预览弹窗里会给出橙色说明，其他功能不受影响。想给它留点线索，
+在预览弹窗的「备注」里写一句就行——写完后卡片上会用金色斜体显示「备注：…」，也能被搜索命中。<br>
 Prompts are read from embedded metadata first, then from ComfyUI's server-side execution history
 (matched by output filename). A downloaded or forwarded image has neither, so it gets no prompt —
-but it is still archived with a thumbnail, kind, size and date, and stays searchable by filename and
-date, categorizable, previewable and deletable.
+but it is still archived with a thumbnail, kind, size and date, and stays searchable by filename,
+date and any note you write, categorizable, previewable and deletable.
 
 预览弹窗会按原因给不同提示，常见三种：
 
 | 提示 | 含义 | 怎么办 |
 |---|---|---|
-| 文件本身不带 ComfyUI 元数据 | 文件不是 ComfyUI 直接存的：网上下载、浏览器另存、手机/微信转存、截图，拖进了 output 目录 | 没有提示词可提取，这不是故障；真想要，只能手改归档目录里的 `info.json`（`positive` 字段），关掉面板再打开才会显示，且不影响图片本身 |
+| 文件本身不带 ComfyUI 元数据 | 文件不是 ComfyUI 直接存的：网上下载、浏览器另存、手机/微信转存、截图，拖进了 output 目录 | 没有提示词可提取，这不是故障；想留点线索，在预览弹窗的「备注」里写一句（显示在卡片上、能被搜到，不动图片本身） |
 | 这次运行没有文本提示词节点 | 工作流里确实没有 CLIPTextEncode 一类节点（纯图像处理、证件照、放大等工作流） | 正常现象，无需处理 |
 | 提示词由 ComfyUI 执行记录找回 | 文件本身没写元数据（例如 `--disable-metadata` 启动），但已从服务端历史补回 | 正常现象，无需处理 |
 
-> 注：归档是复制原始文件，**不会**给你的图片补写元数据；找回的提示词只写进归档目录的
-> `info.json` / `prompt.txt` / `workflow.json`。
+> 注：归档是复制原始文件，**不会**给你的图片补写元数据；找回的提示词和手写的备注都只写进归档目录的
+> `info.json`（提示词另存一份 `prompt.txt`、工作流存 `workflow.json`）。
 > 另外，插件**第一次扫描之前**就已经躺在 output 里的文件，默认只记录不归档；要补归档，在设置里
 > 勾上 `archive_existing`（扫描归档前已有产物）。
 

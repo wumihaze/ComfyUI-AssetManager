@@ -50,6 +50,12 @@
 - **分类顺序参数同样走校验**：`direction` 只接受 `up` / `down`，`pinned` 必须是真正的
   布尔值（`"yes"`、`1`、`"true"` 一律拒绝）；读取 `categories.json` 时不再按上限截断，
   手工改大的文件不会被下一次保存"静默删掉"。
+- **备注接口只写一个字段**（v1.0.13 起）：`/asset/note` 只接受字符串 `run_id` 与字符串
+  `note`，`run_id` 走与删除相同的路径校验（`../`、绝对路径、软链接目录一律拒绝）；
+  写入范围严格限定为**该任务 `info.json` 的 `note` / `note_updated_at` 两个键**，
+  不动媒体文件、不改 `positive`，也不接受任何调用方指定的字段名。内容会剥掉控制字符
+  （`\u2028` / `\u2029` 归一为换行），上限 500 字符；空串等于删除该字段。
+  写入走临时文件 + `os.replace` 原子替换，失败只回固定文案 `Cannot write note`。
 
 No external process is ever launched: video metadata and thumbnails are handled in-process with
 PyAV, and the codebase contains no `subprocess` / `os.system` / `eval` / `exec`. Configuration keys
@@ -61,7 +67,10 @@ directory browsing only reveals entries on the path to an allowed root. Since v1
 route rejects cross-origin `Origin` headers with 403, error responses never echo absolute paths, the
 media route validates the literal `<date>/<run>/<file>` shape before resolving, a single unwritable
 directory no longer aborts a whole scan, and paths read back from the state file are re-validated
-before use.
+before use. Since v1.0.13 the note route writes only the `note` / `note_updated_at` keys of a single
+run's `info.json`, never the media file, and its `run_id` goes through the same path validation as
+deletion.
 
-回归测试：`tests/test_security.py` 覆盖上述全部输入面（47 个用例，含跨站 403、类型混淆、
-目录穿越、符号链接、超长路径、损坏状态文件）；完整用例集共 122 个，全部通过。
+回归测试：`tests/test_security.py` 覆盖上述全部输入面（50 个用例，含跨站 403、类型混淆、
+目录穿越、符号链接、超长路径、损坏状态文件）；`tests/test_notes.py` 另覆盖备注写入的
+边界（15 个用例）；完整用例集共 140 个，全部通过。

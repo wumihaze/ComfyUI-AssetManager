@@ -25,7 +25,7 @@ WEB_DIRECTORY = "web"
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 
-__version__ = "1.0.12"
+__version__ = "1.0.13"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _cfg = assets_core.load_config(BASE_DIR)
@@ -454,6 +454,35 @@ async def asset_assign(request):
                 return assets_core.assign_category(_arch, run_ids, category)
         except Exception:  # 同上: 失败也返回结构化 JSON
             return {"ok": False, "error": "Assign failed"}
+
+    result = await asyncio.to_thread(_go)
+    return web.json_response(result)
+
+
+@PromptServer.instance.routes.post("/asset/note")
+@_same_origin_only
+async def asset_note(request):
+    """写/清一条产物的手动备注(只改 info.json 的 note 字段)。"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        return web.json_response({"ok": False, "error": "Request body must be a JSON object"})
+    run_id = body.get("run_id")
+    if not isinstance(run_id, str):
+        return web.json_response({"ok": False, "error": "run_id must be a string"})
+    note = body.get("note")
+    if not isinstance(note, str):
+        return web.json_response({"ok": False, "error": "note must be a string"})
+
+    def _go():
+        try:
+            with _LOCK:
+                return assets_core.set_run_note(_arch, run_id, note)
+        except Exception:
+            # 不回显异常文本(OSError 的 str() 里带绝对路径)
+            return {"ok": False, "error": "Note failed"}
 
     result = await asyncio.to_thread(_go)
     return web.json_response(result)

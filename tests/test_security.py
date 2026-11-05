@@ -528,6 +528,53 @@ class RouteSecurityTests(unittest.TestCase):
         # 非字符串被丢弃, 不会抛错
         self.assertTrue(data["ok"])
 
+    # ---- /asset/note: 手动备注 ----
+
+    def test_note_rejects_type_confusion(self):
+        for body in ({"run_id": 1, "note": "x"}, {"run_id": ["a"], "note": "x"},
+                     {"run_id": "2026-11-05/r1", "note": 5},
+                     {"run_id": "2026-11-05/r1", "note": ["x"]},
+                     {"note": "x"}, {"run_id": "2026-11-05/r1"}):
+            status, data = self.call("/asset/note", body)
+            self.assertEqual(status, 200, body)
+            self.assertFalse(data["ok"], body)
+            self.assertIsInstance(data.get("error"), str, body)
+
+    def test_note_rejects_traversal_and_oversized_note(self):
+        make_run(self.arch, "2026-11-05/note-target")
+        for run_id in ("../../etc", "/abs/path"):
+            status, data = self.call("/asset/note", {"run_id": run_id, "note": "x"})
+            self.assertEqual(status, 200, run_id)
+            self.assertFalse(data["ok"], run_id)
+            self.assertEqual(data["error"], "invalid path", run_id)
+        # 日期目录本身不是一条记录(含 ../ 归一后落到日期目录的情况):
+        # 不会写到它下面的 info.json
+        for run_id in ("2026-11-05", "2026-11-05/../2026-11-05"):
+            status, data = self.call("/asset/note", {"run_id": run_id, "note": "x"})
+            self.assertFalse(data["ok"], run_id)
+            self.assertEqual(data["error"], "missing info.json", run_id)
+        status, data = self.call(
+            "/asset/note", {"run_id": "2026-11-05/note-target", "note": "x" * 501})
+        self.assertFalse(data["ok"])
+        self.assertIn("note too long", data["error"])
+        # 报错不回显绝对路径
+        self.assertNotIn(self._td.name, json.dumps(data))
+
+    def test_note_round_trip_over_route(self):
+        make_run(self.arch, "2026-11-05/note-rt")
+        status, data = self.call(
+            "/asset/note", {"run_id": "2026-11-05/note-rt", "note": "参考图，来自官网"})
+        self.assertEqual(status, 200)
+        self.assertTrue(data["ok"], data)
+        self.assertEqual(data["note"], "参考图，来自官网")
+        info = json.loads((self.arch / "2026-11-05/note-rt/info.json").read_text(encoding="utf-8"))
+        self.assertEqual(info["note"], "参考图，来自官网")
+        # 清空
+        status, data = self.call("/asset/note", {"run_id": "2026-11-05/note-rt", "note": ""})
+        self.assertTrue(data["ok"])
+        info = json.loads((self.arch / "2026-11-05/note-rt/info.json").read_text(encoding="utf-8"))
+        self.assertNotIn("note", info)
+
     # ---- 只读接口在异常配置下也不能 500 ----
 
     def test_categories_endpoint_survives_missing_archive(self):
@@ -568,7 +615,7 @@ class RouteSecurityTests(unittest.TestCase):
     def test_every_mutating_route_is_guarded(self):
         guarded = ["/asset/set_output_dir", "/asset/set_config", "/asset/delete",
                    "/asset/delete_batch", "/asset/category", "/asset/assign",
-                   "/asset/scan", "/asset/backup"]
+                   "/asset/note", "/asset/scan", "/asset/backup"]
         for path in guarded:
             status, _ = self.call(path, {}, headers={"Host": "127.0.0.1:8188",
                                                      "Origin": "https://evil.example"})
