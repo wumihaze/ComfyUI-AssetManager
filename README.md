@@ -76,12 +76,12 @@ Download the repo zip and extract it into `ComfyUI/custom_nodes/`, keeping the f
    启动 ComfyUI，顶部菜单栏点「**资产管理**」打开面板。
 2. Top toolbar: search box, grid/calendar toggle, all/image/video/audio filter, multi-select, backup, scan, settings.<br>
    顶部工具栏：搜索框、网格/日历切换、全部/图片/视频/音频过滤、多选、备份、扫描、资产设置。
-3. Second row: **Folder** and **Category** dropdowns — pick a source folder to see only assets that came from it, or pick one of your categories.<br>
-   第二行：**文件夹** 与 **分类** 下拉框 —— 选来源文件夹只看该目录的产物，或选自己建好的分类。
+3. Left sidebar, always visible: **Source folders** (auto-derived from output sub-directories, with counts) on top and **My categories** pinned below. Click any row to filter the grid on the right; click again on "All folders" / "All categories" to clear.<br>
+   左侧常驻导航栏：上方 **来源文件夹**（按 output 子目录自动派生，带条数），下方 **我的分类**（常驻，不会被文件夹列表挤走）。点任意一行右侧立刻只剩该范围，点「全部文件夹 / 全部分类」恢复。
 4. Select assets (☑ Multi-select) → **Move to category** → pick an existing category or type a new name. Moving rewrites only archive metadata.<br>
    勾选产物（☑ 多选）→「**移到分类**」→ 选已有分类或直接输入新名字。移动只改归档元数据。
-5. **⚙ Manage categories** (next to the Category dropdown) → rename (✎) or delete (✕) any category, or create a new one. Deleting a category never deletes files: its assets simply become uncategorized.<br>
-   分类下拉框旁的「**⚙ 管理分类**」→ 重命名（✎）/ 删除（✕）任意分类，也可直接新建。删除分类**不会删除文件**，该分类下的产物只会变回「未分类」。
+5. **⚙ Manage categories** (the gear in the My categories header) → rename (✎) or delete (✕) any category, or create a new one. Deleting a category never deletes files: its assets simply become uncategorized.<br>
+   分类区标题旁的 **⚙** → 重命名（✎）/ 删除（✕）任意分类，也可直接新建。删除分类**不会删除文件**，该分类下的产物只会变回「未分类」。
 6. Click an asset → preview dialog: play audio/video, copy prompt / download workflow.json (drag back to canvas to reproduce) / delete from disk.<br>
    点产物 → 预览弹窗：播放音频/视频、复制提示词 / 下载 workflow.json（拖回画布复现）/ 从硬盘删除。
 

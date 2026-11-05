@@ -15,9 +15,27 @@ const STYLE = `
 .asm-btn.on { border-color:var(--comfy-menu-bg, #5b8cff); color:#5b8cff; }
 .asm-btn.primary { background:#2368b0; border-color:#2368b0; color:#fff; }
 .asm-btn.danger { background:#b3372f; border-color:#b3372f; color:#fff; }
-.asm-filters { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:8px 14px; border-bottom:1px solid var(--border-color,#444); }
-.asm-select { background:var(--comfy-input-bg,#333); border:1px solid var(--border-color,#444); color:var(--fg-color,#eee); border-radius:6px; padding:5px 8px; font-size:12px; max-width:280px; }
-.asm-filters .lbl { font-size:12px; color:var(--descrip-text,#aaa); }
+/* 左侧固定导航: 来源文件夹 / 我的分类 (两段各自滚动, 分类常驻底部) */
+.asm-main { display:flex; flex:1; min-height:0; }
+.asm-side { width:172px; flex:0 0 172px; border-right:1px solid var(--border-color,#444); display:flex; flex-direction:column; min-height:0; }
+.asm-side .sec { display:flex; flex-direction:column; min-height:0; }
+.asm-side .sec.folders { flex:1 1 auto; }
+.asm-side .sec.cats { flex:0 0 auto; max-height:46%; border-top:1px solid var(--border-color,#444); }
+.asm-side .list { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; padding:0 6px 8px; display:flex; flex-direction:column; gap:1px; }
+.asm-side .grp { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:.6px; color:var(--descrip-text,#8a8a8a); padding:9px 8px 5px; }
+.asm-side .grp .sp { flex:1; }
+.asm-side .grp .asm-mini { padding:1px 7px; font-size:11px; }
+.asm-side .asm-it { display:flex; align-items:center; gap:6px; width:100%; text-align:left; background:none; border:1px solid transparent; color:var(--fg-color,#eee); border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer; }
+.asm-side .asm-it:hover { background:rgba(91,140,255,.12); }
+.asm-side .asm-it.on { background:rgba(91,140,255,.20); border-color:rgba(91,140,255,.55); color:#cfe0ff; }
+.asm-side .asm-it .tx { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.asm-side .asm-it .n { flex:0 0 auto; font-size:10px; color:var(--descrip-text,#8a8a8a); }
+.asm-side .asm-it.on .n { color:#9db8ff; }
+.asm-side .empty { font-size:11px; color:var(--descrip-text,#8a8a8a); padding:2px 8px 6px; line-height:1.6; }
+@media (max-width: 860px){ .asm-side { width:134px; flex-basis:134px; } }
+@media (max-width: 620px){ .asm-side { width:112px; flex-basis:112px; } .asm-side .asm-it { font-size:11px; padding:4px 6px; } .asm-side .grp { font-size:10px; padding:8px 6px 4px; } }
+.asm-body { flex:1; min-width:0; overflow:auto; padding:14px; }
+.asm-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
 .asm-card .cat { font-size:10px; color:#8fb0ff; background:rgba(91,140,255,.16); border-radius:10px; padding:1px 7px; display:inline-block; margin-bottom:3px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .asm-catlist { display:flex; flex-direction:column; gap:6px; margin:12px 0; max-height:46vh; overflow:auto; }
 .asm-catrow { text-align:left; background:var(--comfy-input-bg,#333); border:1px solid var(--border-color,#444); color:var(--fg-color,#eee); border-radius:8px; padding:9px 12px; font-size:13px; cursor:pointer; }
@@ -31,8 +49,6 @@ const STYLE = `
 .asm-mini:hover { border-color:#5b8cff; }
 .asm-mini.danger { color:#ff8b82; border-color:rgba(179,55,47,.6); }
 .asm-mini-input { flex:1; min-width:0; background:var(--comfy-input-bg,#333); border:1px solid var(--border-color,#444); color:var(--input-text,#eee); border-radius:6px; padding:6px 8px; font-size:13px; }
-.asm-body { flex:1; overflow:auto; padding:14px; }
-.asm-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; }
 .asm-card { background:var(--comfy-input-bg,#2a2a2a); border:1px solid var(--border-color,#444); border-radius:8px; overflow:hidden; cursor:pointer; }
 .asm-card:hover { border-color:#5b8cff; }
 .asm-card.selected { border-color:#5b8cff; box-shadow:0 0 0 2px rgba(91,140,255,.45); }
@@ -50,7 +66,7 @@ const STYLE = `
 .asm-card .mo { font-size:10px; color:#5b8cff; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .asm-empty { color:var(--descrip-text,#aaa); text-align:center; padding:50px 0; }
 /* 日历 */
-.asm-cal { display:grid; grid-template-columns:minmax(400px,540px) 1fr; gap:28px; align-items:start; }
+.asm-cal { display:grid; grid-template-columns:minmax(260px,520px) 1fr; gap:28px; align-items:start; }
 .asm-calbar { display:flex; gap:8px; align-items:center; margin-bottom:16px; }
 .asm-caltitle { font-size:17px; font-weight:700; min-width:130px; text-align:center; letter-spacing:.5px; }
 .asm-calnav { background:var(--comfy-input-bg,#2a2a2a); border:1px solid var(--border-color,#3a3a3a); color:var(--fg-color,#eee); border-radius:8px; padding:6px 13px; cursor:pointer; font-size:13px; transition:border-color .15s, background .15s; }
@@ -131,6 +147,9 @@ app.registerExtension({
       "⟳ 扫描": "⟳ Scan",
       "文件夹": "Folder",
       "分类": "Category",
+      "来源文件夹": "Source folders",
+      "我的分类": "My categories",
+      "还没有分类，点 ⚙ 新建": "No categories yet — click ⚙ to create",
       "全部文件夹": "All folders",
       "（根目录）": "(root)",
       "全部分类": "All categories",
@@ -276,7 +295,9 @@ app.registerExtension({
     let runs = [];
     let view = "grid", kind = "all", selDate = null, calYear = 0, calMonth = 0;
     let multi = false;
-    let folderFilter = "", catFilter = "";
+    // folderFilter: null = 全部文件夹, "" = 根目录, 其它 = 具体子目录
+    // ("" 是合法的根目录值, 不能用它表示"全部", 否则两者会撞在一起)
+    let folderFilter = null, catFilter = "";
     let categories = [];
     const selected = new Set();
     let pollTimer = null;
@@ -285,7 +306,8 @@ app.registerExtension({
     const byDate = {};
     function rebuildByDate() {
       for (const k in byDate) delete byDate[k];
-      for (const r of runs) (byDate[r.date] || (byDate[r.date] = [])).push(r);
+      // 日历只统计"当前左侧选中范围"内的产物, 与右侧列表口径一致
+      for (const r of runs) if (inScope(r)) (byDate[r.date] || (byDate[r.date] = [])).push(r);
     }
 
     function pad(n) { return String(n).padStart(2, "0"); }
@@ -295,13 +317,18 @@ app.registerExtension({
       kw = kw.toLowerCase();
       return ((r.positive + " " + (r.negative || "") + " " + (r.models || []).join(" ") + " " + r.name + " " + (r.date || "")).toLowerCase()).includes(kw);
     }
+    // 左侧导航选中的范围(来源文件夹 + 我的分类)
+    function inScope(r) {
+      if (folderFilter !== null && (r.folder || "") !== folderFilter) return false;
+      if (catFilter === "__none__" && r.category) return false;
+      if (catFilter && catFilter !== "__none__" && r.category !== catFilter) return false;
+      return true;
+    }
     function filtered(list) {
       const kw = q.value.trim();
       return list.filter(r => {
         if (kind !== "all" && r.kind !== kind) return false;
-        if (folderFilter && (r.folder || "") !== folderFilter) return false;
-        if (catFilter === "__none__" && r.category) return false;
-        if (catFilter && catFilter !== "__none__" && r.category !== catFilter) return false;
+        if (!inScope(r)) return false;
         return !kw || matches(r, kw);
       });
     }
@@ -406,68 +433,91 @@ app.registerExtension({
       countEl,
     ]);
 
-    // ---------- 分类筛选: 文件夹(自动派生) / 我的分类(手动) ----------
-    const folderSel = $el("select.asm-select", { onchange: () => { folderFilter = folderSel.value; refresh(); } });
-    const catSel = $el("select.asm-select", { onchange: () => { catFilter = catSel.value; refresh(); } });
-    const folderLbl = $el("span.lbl");
-    bindText(folderLbl, "文件夹");
-    const catLbl = $el("span.lbl");
-    bindText(catLbl, "分类");
-    const catManageBtn = $el("button.asm-btn", { onclick: openCategoryManager });
-    bindText(catManageBtn, "⚙ 管理分类");
-    const filtersRow = $el("div.asm-filters", {}, [folderLbl, folderSel, catLbl, catSel, catManageBtn]);
+    // ---------- 左侧固定导航: 来源文件夹(自动派生) / 我的分类(手动) ----------
+    // 不用下拉: 归档多了文件夹会有上百项, 下拉里翻找又慢又看不到全貌。
+    const side = $el("div.asm-side");
 
-    function rebuildFolderOptions() {
-      const counts = new Map();
+    function sideItem(label, count, active, kind, value, onClick) {
+      const b = $el("button.asm-it" + (active ? ".on" : ""));
+      b.dataset.k = kind;
+      if (value === null) b.dataset.all = "1";   // "全部" 项: 不写 data-v
+      else b.dataset.v = value;
+      b.appendChild($el("span.tx", { textContent: label, title: label }));
+      b.appendChild($el("span.n", { textContent: String(count) }));
+      b.onclick = onClick;
+      return b;
+    }
+
+    // 只切高亮, 不重建列表 —— 重建会把左侧滚动位置弹回顶部
+    function sideActive(el) {
+      const isF = el.dataset.k === "f";
+      const cur = isF ? folderFilter : catFilter;
+      if (el.dataset.all === "1") return isF ? cur === null : cur === "";
+      return el.dataset.v === cur;
+    }
+
+    function syncSideSelection() {
+      for (const el of side.querySelectorAll(".asm-it")) el.classList.toggle("on", sideActive(el));
+    }
+
+    function renderSide() {
+      side.innerHTML = "";
+
+      const fcounts = new Map();
       for (const r of runs) {
         const f = r.folder || "";
-        counts.set(f, (counts.get(f) || 0) + 1);
+        fcounts.set(f, (fcounts.get(f) || 0) + 1);
       }
-      const prev = folderFilter;
-      folderSel.innerHTML = "";
-      const allOpt = document.createElement("option");
-      allOpt.value = "";
-      allOpt.textContent = t("全部文件夹") + " (" + runs.length + ")";
-      folderSel.appendChild(allOpt);
-      const entries = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-      for (const [f, n] of entries) {
-        const o = document.createElement("option");
-        o.value = f;
-        o.textContent = (f || t("（根目录）")) + " (" + n + ")";
-        folderSel.appendChild(o);
-      }
-      folderSel.value = [...folderSel.options].some(o => o.value === prev) ? prev : "";
-      folderFilter = folderSel.value;
-    }
+      // 选中的文件夹/分类被删掉后自动回到"全部"
+      if (folderFilter !== null && !fcounts.has(folderFilter)) folderFilter = null;
+      if (catFilter && catFilter !== "__none__" && !categories.some(c => c.id === catFilter)) catFilter = "";
 
-    function rebuildCatOptions() {
-      const counts = new Map();
+      // 上段: 来源文件夹(条目多, 自己滚)
+      const fList = $el("div.list");
+      fList.appendChild(sideItem(t("全部文件夹"), runs.length, folderFilter === null, "f", null,
+        () => { folderFilter = null; refresh(); }));
+      const entries = [...fcounts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+      for (const [f, n] of entries) {
+        fList.appendChild(sideItem(f || t("（根目录）"), n, folderFilter === f, "f", f,
+          () => { folderFilter = f; refresh(); }));
+      }
+      side.appendChild($el("div.sec.folders", {}, [
+        $el("div.grp", {}, [$el("span", { textContent: t("来源文件夹") })]),
+        fList,
+      ]));
+
+      // 下段: 我的分类(常驻底部, 不会被文件夹列表挤走)
       let uncat = 0;
+      const ccounts = new Map();
       for (const r of runs) {
-        if (r.category) counts.set(r.category, (counts.get(r.category) || 0) + 1);
+        if (r.category) ccounts.set(r.category, (ccounts.get(r.category) || 0) + 1);
         else uncat++;
       }
-      const prev = catFilter;
-      catSel.innerHTML = "";
-      const allOpt = document.createElement("option");
-      allOpt.value = "";
-      allOpt.textContent = t("全部分类");
-      catSel.appendChild(allOpt);
-      const noneOpt = document.createElement("option");
-      noneOpt.value = "__none__";
-      noneOpt.textContent = t("未分类") + " (" + uncat + ")";
-      catSel.appendChild(noneOpt);
+      const manageBtn = $el("button.asm-mini", { onclick: openCategoryManager, title: t("管理分类") });
+      manageBtn.textContent = "⚙";
+      const cList = $el("div.list");
+      cList.appendChild(sideItem(t("全部分类"), runs.length, catFilter === "", "c", null,
+        () => { catFilter = ""; refresh(); }));
+      cList.appendChild(sideItem(t("未分类"), uncat, catFilter === "__none__", "c", "__none__",
+        () => { catFilter = "__none__"; refresh(); }));
       for (const c of categories) {
-        const o = document.createElement("option");
-        o.value = c.id;
-        o.textContent = c.name + " (" + (counts.get(c.id) || 0) + ")";
-        catSel.appendChild(o);
+        cList.appendChild(sideItem(c.name, ccounts.get(c.id) || 0, catFilter === c.id, "c", c.id,
+          () => { catFilter = c.id; refresh(); }));
       }
-      catSel.value = [...catSel.options].some(o => o.value === prev) ? prev : "";
-      catFilter = catSel.value;
+      if (!categories.length) {
+        cList.appendChild($el("div.empty", { textContent: t("还没有分类，点 ⚙ 新建") }));
+      }
+      side.appendChild($el("div.sec.cats", {}, [
+        $el("div.grp", {}, [
+          $el("span", { textContent: t("我的分类") }),
+          $el("span.sp"),
+          manageBtn,
+        ]),
+        cList,
+      ]));
     }
 
-    relabelers.push(() => { rebuildFolderOptions(); rebuildCatOptions(); });
+    relabelers.push(renderSide);
 
     const panelTitle = $el("h2");
     bindText(panelTitle, "🗂 资产管理");
@@ -478,8 +528,7 @@ app.registerExtension({
         $el("button.asm-x", { textContent: "✕", onclick: closePanel }),
       ]),
       toolbar,
-      filtersRow,
-      body,
+      $el("div.asm-main", {}, [side, body]),
       status,
     ]);
     body.appendChild(gridEl);
@@ -602,8 +651,10 @@ app.registerExtension({
     }
 
     function refresh() {
+      rebuildByDate();
       if (view === "grid") { gridEl.style.display = ""; calWrap.style.display = "none"; renderGrid(); }
       else { gridEl.style.display = "none"; calWrap.style.display = ""; renderCal(); }
+      syncSideSelection();
       updateBatchBtn();
     }
 
@@ -658,7 +709,7 @@ app.registerExtension({
       if (!d.ok) { statusMsg(terr(d.error) || t("移动失败")); return; }
       const moved = new Set(d.updated || []);
       for (const r of runs) if (moved.has(r.dir)) r.category = cid;
-      rebuildCatOptions();
+      renderSide();
       refresh();
       const skipped = (d.skipped || []).length;
       statusMsg(
@@ -728,7 +779,7 @@ app.registerExtension({
       const d = await res.json();
       if (!d.ok) { statusMsg(terr(d.error) || t("重命名失败")); return false; }
       categories = d.categories || categories;
-      rebuildCatOptions();
+      renderSide();
       refresh();
       statusMsg(t("已重命名"));
       return true;
@@ -749,7 +800,7 @@ app.registerExtension({
       if (!d.ok) { statusMsg(terr(d.error) || t("删除失败")); return false; }
       categories = d.categories || [];
       for (const r of runs) if (r.category === c.id) r.category = null;
-      rebuildCatOptions();
+      renderSide();
       refresh();
       statusMsg(t("已删除分类") + (d.cleared ? " · " + d.cleared + t(" 项已转为未分类") : ""));
       return true;
@@ -825,7 +876,7 @@ app.registerExtension({
         if (!d.ok) { statusMsg(terr(d.error) || t("新建失败")); return; }
         categories = d.categories || categories;
         input.value = "";
-        rebuildCatOptions();
+        renderSide();
         renderList();
         statusMsg(t("已新建分类"));
       };
@@ -1130,8 +1181,7 @@ app.registerExtension({
         const d = runs[0].date;
         calYear = Number(d.slice(0, 4)); calMonth = Number(d.slice(5, 7)) - 1; selDate = d;
       }
-      rebuildFolderOptions();
-      rebuildCatOptions();
+      renderSide();
       refresh();
       statusMsg(t("共 ") + runs.length + t(" 条资产"));
       if (pollTimer) clearInterval(pollTimer);
@@ -1163,8 +1213,7 @@ app.registerExtension({
           rebuildByDate();
           // 清除已不存在的选中项
           for (const s of [...selected]) if (!newDirs.has(s)) selected.delete(s);
-          rebuildFolderOptions();
-          rebuildCatOptions();
+          renderSide();
           refresh();
           statusMsg(t("已自动更新: 共 ") + runs.length + t(" 条资产"));
         }
