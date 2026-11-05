@@ -156,21 +156,35 @@ Older records without these fields are derived on the fly from `source_rel`, so 
 
 提示词优先从**文件内嵌元数据**读取（PNG `tEXt` / WebP `EXIF` / MP4-MKV ffmpeg tag）。
 文件里没有元数据时，插件会再从 **ComfyUI 服务端执行记录**里按文件名找回当时那次执行的
-提示词与工作流，所以正常情况下跑出来的图都能带上提示词。<br>
-Prompts are read from the file's embedded metadata first; if absent, the plugin falls back to
-ComfyUI's server-side execution history (matched by output filename), so generated images normally
-carry their prompt.
+提示词与工作流，所以 ComfyUI 自己跑出来的图一般都能带上提示词。
 
-预览弹窗会说明具体原因，常见三种：
+**从网上下载的图片、别人发来的图、手机照片、截图**这两条路都走不通——文件里没写，执行记录里也没有，
+所以提不出提示词。但**文件照样会归档**，只是少了提示词这一类信息：
+
+| 照样能用 | 拿不到 |
+|---|---|
+| 缩略图、类型（图片/视频/音频）、文件大小、日期、来源文件名 | 提示词 / 负向提示词 |
+| 按文件名和日期搜索、分类、预览、删除、批量删除 | 模型 / LoRA、采样参数 |
+| 归档副本（output 被清空也不丢） | `workflow.json`（点下载会提示"该产物未携带 workflow 元数据"） |
+
+卡片上显示「(未检测到提示词)」，预览弹窗里会给出橙色说明，其他功能不受影响。<br>
+Prompts are read from embedded metadata first, then from ComfyUI's server-side execution history
+(matched by output filename). A downloaded or forwarded image has neither, so it gets no prompt —
+but it is still archived with a thumbnail, kind, size and date, and stays searchable by filename and
+date, categorizable, previewable and deletable.
+
+预览弹窗会按原因给不同提示，常见三种：
 
 | 提示 | 含义 | 怎么办 |
 |---|---|---|
-| 文件本身不带 ComfyUI 元数据 | 图片不是 ComfyUI 直接存的：浏览器另存、手机/微信转存后拖进 output 目录；或 ComfyUI 启动时带了 `--disable-metadata`（隐私模式） | 用「保存图像 / SaveImage」节点跑出来的图会自动归档并带上提示词；若用了 `--disable-metadata`，去掉该参数即可 |
+| 文件本身不带 ComfyUI 元数据 | 文件不是 ComfyUI 直接存的：网上下载、浏览器另存、手机/微信转存、截图，拖进了 output 目录 | 没有提示词可提取，这不是故障；真想要，只能手改归档目录里的 `info.json`（`positive` 字段），关掉面板再打开才会显示，且不影响图片本身 |
 | 这次运行没有文本提示词节点 | 工作流里确实没有 CLIPTextEncode 一类节点（纯图像处理、证件照、放大等工作流） | 正常现象，无需处理 |
-| 提示词由 ComfyUI 执行记录找回 | 文件本身没写元数据，但已从服务端历史补回 | 正常现象（说明该文件不带元数据，但提示词已找回） |
+| 提示词由 ComfyUI 执行记录找回 | 文件本身没写元数据（例如 `--disable-metadata` 启动），但已从服务端历史补回 | 正常现象，无需处理 |
 
 > 注：归档是复制原始文件，**不会**给你的图片补写元数据；找回的提示词只写进归档目录的
 > `info.json` / `prompt.txt` / `workflow.json`。
+> 另外，插件**第一次扫描之前**就已经躺在 output 里的文件，默认只记录不归档；要补归档，在设置里
+> 勾上 `archive_existing`（扫描归档前已有产物）。
 
 ## License
 
