@@ -145,7 +145,22 @@ const STYLE = `
 .asm-modal .rows { margin-top:12px; font-size:12px; color:var(--descrip-text,#aaa); }
 .asm-modal textarea { width:100%; height:130px; background:var(--comfy-input-bg,#333); border:1px solid var(--border-color,#444); color:var(--input-text,#eee); border-radius:6px; padding:8px; font-size:12px; margin-top:6px; }
 .asm-modal .btns { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
-.asm-modal .x { position:absolute; top:8px; right:12px; background:none; border:none; color:var(--fg-color,#eee); font-size:20px; cursor:pointer; z-index:2; }
+/* 关闭按钮: 常压在图片/视频上, 必须是自带底色的圆钮, 否则亮画面上完全看不见 */
+.asm-modal .x {
+  position:absolute; top:8px; right:12px; z-index:5;
+  width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.60); border:1px solid rgba(255,255,255,.34); border-radius:50%;
+  color:#fff; font-size:15px; line-height:1; cursor:pointer;
+  -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+  box-shadow:0 2px 10px rgba(0,0,0,.55);
+  transition:background .15s, border-color .15s, transform .15s;
+}
+.asm-modal .x:hover { background:rgba(0,0,0,.85); border-color:rgba(255,255,255,.62); }
+.asm-modal .x:active { transform:scale(.94); }
+.asm-modal .x:focus-visible { outline:2px solid #5b8cff; outline-offset:2px; }
+/* 预览弹窗给关闭按钮留出一条空档, 不让它压住画面 */
+.asm-modal .pn.preview { padding-top:42px; }
+.asm-modal img { max-height:70vh; object-fit:contain; }
 /* 设置 */
 .asm-set { margin:4px 0; }
 .asm-set .row { display:flex; gap:8px; align-items:center; margin:8px 0; font-size:13px; }
@@ -239,6 +254,7 @@ app.registerExtension({
       "删除分类": "Delete category",
       "保存": "Save",
       "取消": "Cancel",
+      "关闭": "Close",
       "已重命名": "Renamed",
       "重命名失败": "Rename failed",
       "删除失败": "Delete failed",
@@ -986,7 +1002,7 @@ app.registerExtension({
       const m = $el("div.asm-modal", { style: { display: "flex" } });
       m.appendChild($el("div.bk", { onclick: () => m.remove() }));
       const pn = $el("div.pn", { style: { width: "min(460px,92vw)" } });
-      pn.appendChild($el("button.x", { textContent: "✕", onclick: () => m.remove() }));
+      pn.appendChild(closeX(m));
       pn.appendChild($el("h3", { textContent: t("移到分类") }));
 
       const hint = $el("div.asm-assign-hint");
@@ -1140,7 +1156,7 @@ app.registerExtension({
       const m = $el("div.asm-modal", { style: { display: "flex" } });
       m.appendChild($el("div.bk", { onclick: () => m.remove() }));
       const pn = $el("div.pn", { style: { width: "min(560px,92vw)" } });
-      pn.appendChild($el("button.x", { textContent: "✕", onclick: () => m.remove() }));
+      pn.appendChild(closeX(m));
       pn.appendChild($el("h3", { textContent: t("管理分类") }));
       pn.appendChild($el("div.asm-assign-hint", {
         textContent: t("点 ＋ 在某个分类下新建子分类；📌 置顶，↑↓ 调整顺序。删除分类不会删除文件。"),
@@ -1331,6 +1347,14 @@ app.registerExtension({
       });
     }
 
+    // 所有弹窗共用的关闭按钮: 自带深色圆底, 压在图片/视频上也看得见
+    function closeX(modal) {
+      const b = $el("button.x", { textContent: "✕", title: t("关闭") });
+      b.setAttribute("aria-label", t("关闭"));
+      b.onclick = () => modal.remove();
+      return b;
+    }
+
     function openPreview(r) {
       const m = $el("div.asm-modal");
       m.style.display = "flex";
@@ -1348,8 +1372,8 @@ app.registerExtension({
       const ph = promptHint(r);
       const models = (r.models || []).join(", ") || "—";
       const params = Object.keys(r.params || {}).map(k => k + "=" + r.params[k]).join(" · ") || "—";
-      const pn = $el("div.pn", {}, [
-        $el("button.x", { textContent: "✕", onclick: () => m.remove() }),
+      const pn = $el("div.pn.preview", {}, [
+        closeX(m),
         media,
         $el("div.rows", {}, [
           labeledRow([{ zh: "来源: ", text: r.name }]),
@@ -1420,7 +1444,7 @@ app.registerExtension({
       ].filter(Boolean));
 
       const pn = $el("div.pn", {}, [
-        $el("button.x", { textContent: "✕", onclick: () => m.remove() }),
+        closeX(m),
         bindText($el("h2", { style: { margin: "0 0 10px", fontSize: "15px" } }), "⚙ 资产设置"),
         $el("div.asm-set", {}, [
           row("输出目录", fOut, true),
@@ -1497,7 +1521,7 @@ app.registerExtension({
       }
 
       const pn = $el("div.pn", {}, [
-        $el("button.x", { textContent: "✕", onclick: () => m.remove() }),
+        closeX(m),
         bindText($el("h2", { style: { margin: "0 0 10px", fontSize: "15px" } }), "📁 选择目录"),
         pathEl,
         $el("div.btns", { style: { margin: "8px 0" } }, [
@@ -1533,7 +1557,7 @@ app.registerExtension({
       bakRow.appendChild(bakPrefix);
       bakRow.appendChild(document.createTextNode(bakDir));
       const pn = $el("div.pn", {}, [
-        $el("button.x", { textContent: "✕", onclick: () => m.remove() }),
+        closeX(m),
         bindText($el("h2", { style: { margin: "0 0 12px", fontSize: "15px" } }), "💾 备份确认"),
         bindText($el("div", { style: { fontSize: "13px", marginBottom: "6px" } }), "将备份以下内容:"),
         bindText($el("div", { style: { fontSize: "13px", color: "var(--descrip-text,#aaa)", marginBottom: "12px", lineHeight: "1.8" } }), "• 资产库（图片/视频/元数据/工作流）<br>• 工作流文件 (user/default/workflows)<br>• 插件配置", "innerHTML"),
