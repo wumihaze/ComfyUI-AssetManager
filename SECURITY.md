@@ -37,8 +37,9 @@
   这一类 CSRF；不带 `Origin`（curl、脚本、同源导航）和 `Origin: null` 照常放行。
 - **报错不回显绝对路径**（v1.0.12 起）：所有接口的异常文本都换成固定文案
   （`Category operation failed` / `Assign failed` / `Cannot create <key>` /
-  `Cannot read directory` / `Scan failed`），不再把 `OSError` 的原始字符串
-  （里面通常带完整盘符路径）返回给前端。
+  `Cannot read directory` / `Scan failed` / `Cannot switch output directory`），
+  不再把 `OSError` 的原始字符串（里面通常带完整盘符路径）返回给前端。
+  v1.0.13 复查时补上了 `/asset/set_output_dir` 这个漏掉的异常分支。
 - **媒体路径按字面形状校验**（v1.0.12 起）：`/asset/file` 在 `resolve()` 之前先按字面
   检查是不是恰好三段 `<日期>/<任务>/<文件名>`，任何一段为空、`.` 或 `..` 直接拒绝。
   这样 `2026-10-31/run-1/../run-1/a.png` 这类"解析后仍在目录内"的路径也进不来。
@@ -71,6 +72,6 @@ before use. Since v1.0.13 the note route writes only the `note` / `note_updated_
 run's `info.json`, never the media file, and its `run_id` goes through the same path validation as
 deletion.
 
-回归测试：`tests/test_security.py` 覆盖上述全部输入面（50 个用例，含跨站 403、类型混淆、
+回归测试：`tests/test_security.py` 覆盖上述全部输入面（51 个用例，含跨站 403、类型混淆、
 目录穿越、符号链接、超长路径、损坏状态文件）；`tests/test_notes.py` 另覆盖备注写入的
-边界（15 个用例）；完整用例集共 140 个，全部通过。
+边界（15 个用例）；完整用例集共 141 个，全部通过。

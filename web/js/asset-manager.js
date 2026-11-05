@@ -290,6 +290,9 @@ app.registerExtension({
       "备注已清除": "Note cleared",
       "保存失败: ": "Save failed: ",
       "该产物未携带 workflow 元数据": "This asset has no workflow metadata",
+      "• 资产库（图片/视频/元数据/工作流）": "• Asset library (images / videos / metadata / workflows)",
+      "• 工作流文件 (user/default/workflows)": "• Workflow files (user/default/workflows)",
+      "• 插件配置": "• Plugin config",
       "下载失败": "Download failed",
       "已从硬盘删除": "Deleted from disk",
       "未知错误": "unknown error",
@@ -354,6 +357,7 @@ app.registerExtension({
       "invalid info.json": "info.json 格式不对",
       "Cannot write note": "备注写入失败（归档目录可能不可写）",
       "Note failed": "备注保存失败",
+      "Cannot switch output directory": "切换输出目录失败（目录可能不可写或不存在）",
     };
     function terr(en) { return LANG === "zh" ? (ERR_L10N[en] || en) : en; }
     detectLang();
@@ -1619,7 +1623,11 @@ app.registerExtension({
         closeX(m),
         bindText($el("h2", { style: { margin: "0 0 12px", fontSize: "15px" } }), "💾 备份确认"),
         bindText($el("div", { style: { fontSize: "13px", marginBottom: "6px" } }), "将备份以下内容:"),
-        bindText($el("div", { style: { fontSize: "13px", color: "var(--descrip-text,#aaa)", marginBottom: "12px", lineHeight: "1.8" } }), "• 资产库（图片/视频/元数据/工作流）<br>• 工作流文件 (user/default/workflows)<br>• 插件配置", "innerHTML"),
+        $el("div", { style: { fontSize: "13px", color: "var(--descrip-text,#aaa)", marginBottom: "12px", lineHeight: "1.8" } }, [
+          bindText($el("div"), "• 资产库（图片/视频/元数据/工作流）"),
+          bindText($el("div"), "• 工作流文件 (user/default/workflows)"),
+          bindText($el("div"), "• 插件配置"),
+        ]),
         bakRow,
         $el("div.btns", {}, [
           bindText($el("button.asm-btn.primary", { onclick: () => { m.remove(); doBackup(); } }), "确定备份"),

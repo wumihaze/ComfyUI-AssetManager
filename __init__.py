@@ -201,8 +201,9 @@ async def asset_set_output_dir(request):
             folder_paths.set_output_directory(path)
         _cfg["output_dir"] = path
         assets_core.save_config(BASE_DIR, _cfg)
-    except Exception as e:
-        return web.json_response({"ok": False, "error": str(e)})
+    except Exception:
+        # 不回显异常文本: OSError 的 str() 里带绝对路径(和其余接口保持一致)
+        return web.json_response({"ok": False, "error": "Cannot switch output directory"})
     return web.json_response({"ok": True, "output_dir": path})
 
 

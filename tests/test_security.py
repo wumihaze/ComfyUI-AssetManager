@@ -711,6 +711,20 @@ class RouteSecurityTests(unittest.TestCase):
         self.assertIs(self.mod._cfg.get("auto_archive"), True)
         self.assertNotIn("evil_key", self.mod._cfg)
 
+    def test_set_output_dir_error_does_not_leak_path(self):
+        """建目录失败时不能把 OSError 的原文回给前端(里面带绝对路径)。"""
+        root = Path(self._td.name)
+        blocker = root / "blocker"
+        blocker.write_text("x", encoding="utf-8")
+        target = blocker / "sub"          # 父级是文件 → makedirs 会抛 NotADirectoryError
+        status, data = self.call("/asset/set_output_dir", {"path": str(target)})
+        self.assertEqual(status, 200)
+        self.assertFalse(data["ok"])
+        self.assertEqual(data["error"], "Cannot switch output directory")
+        self.assertNotIn(str(root), json.dumps(data))
+        # 配置也不能被这次失败改动
+        self.assertNotEqual(self.mod._cfg.get("output_dir"), str(target))
+
 
 if __name__ == "__main__":
     unittest.main()
