@@ -12,8 +12,8 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image, video,
   **双视图浏览** — 网格视图 + **日历视图**（按日期归档，每天显示图片/视频/音频数量徽标，点某天看当天产物）。
 - **Search & filter** — full-text search by prompt/model/filename/date; filter by image/video/audio, by **source folder**, or by **your own category**.<br>
   **搜索与过滤** — 按提示词/模型/文件名/日期全文搜索，可按图片/视频/音频、**自建分类**（两级树）过滤，需要时还能按**来源文件夹**筛。
-- **Category tree** — date grouping stays, but the sidebar is now a single, folder-like tree: create categories, nest one level of sub-categories under them, and multi-select assets to move them in. Selecting a parent includes everything in its sub-categories. Categories can be **pinned to the top** and **reordered** with ↑↓ (per level, pinned ones stay above unpinned ones). Moving only rewrites archive metadata — original files and the archive layout are untouched, so it is instant and reversible. The source-folder filter is still there, folded away at the bottom.<br>
-  **分类树** — 日期分组保留，但左侧只剩一棵像文件夹的树：建分类、在分类下再挂一层子分类、多选产物移进去。选中父分类会把子分类里的产物一并算进来。分类可以**置顶**、用 ↑↓ **调整顺序**（按层级分组，置顶的始终排在未置顶之上）。移动只改归档元数据，不动原始文件、不动归档目录结构，毫秒级且可逆；「来源文件夹」筛选仍在，收在侧栏底部。
+- **Category tree** — the sidebar is one folder-like tree: create categories, nest one level of sub-categories under them, and multi-select assets to move them in. Selecting a parent includes everything in its sub-categories. Categories can be **pinned to the top** and **reordered** with ↑↓ (per level, pinned ones stay above unpinned ones). Moving only rewrites archive metadata — original files and the archive layout are untouched, so it is instant and reversible. A source-folder filter is also available, folded away at the bottom.<br>
+  **分类树** — 左侧是一棵像文件夹的树：建分类、在分类下再挂一层子分类、多选产物移进去。选中父分类会把子分类里的产物一并算进来。分类可以**置顶**、用 ↑↓ **调整顺序**（按层级分组，置顶的始终排在未置顶之上）。移动只改归档元数据，不动原始文件、不动归档目录结构，毫秒级且可逆；另外还有「来源文件夹」筛选，收在侧栏底部。
 - **Preview & reproduce** — view full-size images, play videos and audio, copy prompt, download `workflow.json` (drag it back onto the canvas to restore the whole workflow).<br>
   **预览与复现** — 查看大图、播放视频和音频、复制提示词、下载 workflow.json（拖回画布还原整套工作流）。
 - **Batch delete** — multi-select (Ctrl/Shift click or drag a box on empty space) and delete from disk in one click (archive copy + original output file); single delete too.<br>
@@ -28,31 +28,6 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image, video,
   **目录点选** — 输出/归档/备份三个目录都带「浏览…」按钮，鼠标点选目录，无需手输路径。
 - **One-click backup** — package "asset library + workflows + plugin config" into a zip.<br>
   **一键备份** — 把「资产库 + 工作流 + 插件配置」打包成 zip。
-
-### Differentiators · 差异化
-
-同类里做得最完整的四家：**[comfyui-browser](https://github.com/netaart/comfyui-browser)**（679★，面板内浏览 output + 工作流收藏）、**[SmartGallery DAM](https://github.com/biagiomaf/smart-comfyui-gallery)**（399★，独立进程的全功能 DAM）、**[Image MetaHub](https://github.com/LuqP2/Image-MetaHub)**（335★，跨工具的元数据库）、**[ComfyUI Local Media Manager](https://github.com/Firetheft/ComfyUI_Local_Media_Manager)**（146★，面板内的媒体文件管理器）。按各自 README 逐项核对过（2026-11），**确实只有本插件有**的是下面四条：
-
-- **Auto-archive, not just indexing** — the other four index files where they sit; nothing is copied when a generation finishes, so clearing `output/` loses everything. This plugin copies each generation into an archive tree with its own `info.json` / `prompt.txt` / `workflow.json`, so the library survives `output/` being wiped, reorganized, or pointed elsewhere.<br>
-  **自动归档而不是原地索引** — 那四家都是在文件原位置建索引，生成结束时不会复制任何东西，所以清空 `output/` 就全没了。本插件在生成时就把产物连同 `info.json` / `prompt.txt` / `workflow.json` 复制进独立归档树，output 被清空、整理或换盘都不影响资产库。
-- **Content-fingerprint dedup** — tidying `output/` never duplicates the library: moving/renaming a file updates the existing record in place instead of archiving a second copy.<br>
-  **内容指纹去重** — 整理 `output/` 不会让资产库翻倍：移动/改名只更新原记录，不会多出一份。竞品不做归档复制，也就没有这个问题要解决——这一条只对归档型插件有意义。
-- **Calendar view** — a real month grid with per-day image/video/audio counts; click a day to see that day's assets. None of the four above has one (they offer date filtering or sorting at most).<br>
-  **日历视图** — 真正的月历格子，每天标出图片/视频/音频数量，点某天看当天产物。上面四家都没有（最多只有日期筛选或按日期排序）。
-- **Output directory switching, restored after restart** — change ComfyUI's output directory from the panel and new assets save there immediately; the choice survives a ComfyUI restart. Competitors can only "point at" a folder — none of them changes ComfyUI's actual output path.<br>
-  **输出目录切换且重启自动恢复** — 在面板里改 ComfyUI 的输出目录，新产物立刻改存，重启后自动恢复。竞品只能「指向」某个目录，没有一家会去改 ComfyUI 真正的输出路径。
-
-> 反过来，**批量删除、实时刷新、目录点选、标签/合集组织**这几项竞品也都有（SmartGallery 的 Auto-Watch、Local Media Manager 的批量删除、Image MetaHub 的 folder watching 等），所以这里不把它们算作差异点。
-
-| 按 README 核对（2026-11） | comfyui-browser | SmartGallery | Image MetaHub | Local Media Manager | **本插件** |
-|---|:--:|:--:|:--:|:--:|:--:|
-| 归档副本（清空 output 也不丢） | — | — | — | — | ✅ |
-| 内容指纹去重（整理 output 不重复） | n/a | n/a | n/a | n/a | ✅ |
-| 日历视图 | — | — | — | — | ✅ |
-| 面板内切换 output 目录 + 重启恢复 | — | — | — | — | ✅ |
-| 网格浏览 / 提示词搜索 / 批量删除 / 实时刷新 | 部分 | ✅ | ✅ | ✅ | ✅ |
-
-「—」= 该项目 README 未提供该能力（不代表代码里一定没有）；「n/a」= 对方不归档文件，这条对它不适用。这些项目本身都很强——SmartGallery 有队列控制、聚类、客户端评审；Image MetaHub 有相似图搜索和跨工具元数据；comfyui-browser 有工作流 Git 同步。**本插件的定位是「自动归档 + 日历回看」，不是要替代它们。**
 
 ## 📸 Screenshots · 界面预览
 
