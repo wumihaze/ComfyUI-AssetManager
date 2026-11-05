@@ -15,6 +15,15 @@ const STYLE = `
 .asm-btn.on { border-color:var(--comfy-menu-bg, #5b8cff); color:#5b8cff; }
 .asm-btn.primary { background:#2368b0; border-color:#2368b0; color:#fff; }
 .asm-btn.danger { background:#b3372f; border-color:#b3372f; color:#fff; }
+.asm-filters { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:8px 14px; border-bottom:1px solid var(--border-color,#444); }
+.asm-select { background:var(--comfy-input-bg,#333); border:1px solid var(--border-color,#444); color:var(--fg-color,#eee); border-radius:6px; padding:5px 8px; font-size:12px; max-width:280px; }
+.asm-filters .lbl { font-size:12px; color:var(--descrip-text,#aaa); }
+.asm-card .cat { font-size:10px; color:#8fb0ff; background:rgba(91,140,255,.16); border-radius:10px; padding:1px 7px; display:inline-block; margin-bottom:3px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.asm-catlist { display:flex; flex-direction:column; gap:6px; margin:12px 0; max-height:46vh; overflow:auto; }
+.asm-catrow { text-align:left; background:var(--comfy-input-bg,#333); border:1px solid var(--border-color,#444); color:var(--fg-color,#eee); border-radius:8px; padding:9px 12px; font-size:13px; cursor:pointer; }
+.asm-catrow:hover { border-color:#5b8cff; }
+.asm-newcat { display:flex; gap:8px; align-items:center; }
+.asm-newcat input { flex:1; min-width:120px; }
 .asm-body { flex:1; overflow:auto; padding:14px; }
 .asm-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; }
 .asm-card { background:var(--comfy-input-bg,#2a2a2a); border:1px solid var(--border-color,#444); border-radius:8px; overflow:hidden; cursor:pointer; }
@@ -113,6 +122,22 @@ app.registerExtension({
       "⚙ 资产设置": "⚙ Settings",
       "💾 备份": "💾 Backup",
       "⟳ 扫描": "⟳ Scan",
+      "文件夹": "Folder",
+      "分类": "Category",
+      "全部文件夹": "All folders",
+      "（根目录）": "(root)",
+      "全部分类": "All categories",
+      "未分类": "Uncategorized",
+      "🏷 移到分类": "🏷 Move to category",
+      "移到分类": "Move to category",
+      " 项": " items",
+      "已移动 ": "Moved ",
+      "未分类（移出分类）": "Uncategorized (clear)",
+      "还没有分类，在下面新建一个": "No categories yet — create one below",
+      "新建分类名称": "New category name",
+      "新建并移入": "Create and move",
+      "移动失败": "Move failed",
+      "新建失败": "Create failed",
       "图": "Img",
       "(未检测到提示词)": "(no prompt detected)",
       "没有匹配的产物": "No matching assets",
@@ -176,6 +201,11 @@ app.registerExtension({
       "Missing run_id": "缺少 run_id",
       "Invalid archive path": "非法的归档路径",
       "Archive entry not found": "未找到该归档条目",
+      "Category not found": "分类不存在",
+      "Category already exists": "分类已存在",
+      "Category name is required": "分类名不能为空",
+      "Too many categories": "分类数量已达上限",
+      "Unknown action": "未知操作",
     };
     function terr(en) { return LANG === "zh" ? (ERR_L10N[en] || en) : en; }
     detectLang();
@@ -226,6 +256,8 @@ app.registerExtension({
     let runs = [];
     let view = "grid", kind = "all", selDate = null, calYear = 0, calMonth = 0;
     let multi = false;
+    let folderFilter = "", catFilter = "";
+    let categories = [];
     const selected = new Set();
     let pollTimer = null;
     let curConfig = {};
@@ -245,7 +277,19 @@ app.registerExtension({
     }
     function filtered(list) {
       const kw = q.value.trim();
-      return list.filter(r => (kind === "all" || r.kind === kind) && (!kw || matches(r, kw)));
+      return list.filter(r => {
+        if (kind !== "all" && r.kind !== kind) return false;
+        if (folderFilter && (r.folder || "") !== folderFilter) return false;
+        if (catFilter === "__none__" && r.category) return false;
+        if (catFilter && catFilter !== "__none__" && r.category !== catFilter) return false;
+        return !kw || matches(r, kw);
+      });
+    }
+
+    function categoryName(r) {
+      if (!r.category) return "";
+      const c = categories.find(x => x.id === r.category);
+      return c ? c.name : "";
     }
 
     // ---------- 面板骨架 ----------
@@ -316,6 +360,8 @@ app.registerExtension({
     bindText(multiBtn, "☑ 多选");
     const batchBtn = $el("button.asm-btn.danger", { onclick: batchDelete, style: { display: "none" } });
     bindText(batchBtn, "🗑 删除选中");
+    const assignBtn = $el("button.asm-btn.primary", { onclick: openAssignModal, style: { display: "none" } });
+    bindText(assignBtn, "🏷 移到分类");
 
     const settingsBtn = $el("button.asm-btn", { onclick: openSettings });
     bindText(settingsBtn, "⚙ 资产设置");
@@ -333,11 +379,73 @@ app.registerExtension({
       mkKindBtn("音频", "audio"),
       multiBtn,
       batchBtn,
+      assignBtn,
       settingsBtn,
       backupBtn,
       scanBtn,
       countEl,
     ]);
+
+    // ---------- 分类筛选: 文件夹(自动派生) / 我的分类(手动) ----------
+    const folderSel = $el("select.asm-select", { onchange: () => { folderFilter = folderSel.value; refresh(); } });
+    const catSel = $el("select.asm-select", { onchange: () => { catFilter = catSel.value; refresh(); } });
+    const folderLbl = $el("span.lbl");
+    bindText(folderLbl, "文件夹");
+    const catLbl = $el("span.lbl");
+    bindText(catLbl, "分类");
+    const filtersRow = $el("div.asm-filters", {}, [folderLbl, folderSel, catLbl, catSel]);
+
+    function rebuildFolderOptions() {
+      const counts = new Map();
+      for (const r of runs) {
+        const f = r.folder || "";
+        counts.set(f, (counts.get(f) || 0) + 1);
+      }
+      const prev = folderFilter;
+      folderSel.innerHTML = "";
+      const allOpt = document.createElement("option");
+      allOpt.value = "";
+      allOpt.textContent = t("全部文件夹") + " (" + runs.length + ")";
+      folderSel.appendChild(allOpt);
+      const entries = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+      for (const [f, n] of entries) {
+        const o = document.createElement("option");
+        o.value = f;
+        o.textContent = (f || t("（根目录）")) + " (" + n + ")";
+        folderSel.appendChild(o);
+      }
+      folderSel.value = [...folderSel.options].some(o => o.value === prev) ? prev : "";
+      folderFilter = folderSel.value;
+    }
+
+    function rebuildCatOptions() {
+      const counts = new Map();
+      let uncat = 0;
+      for (const r of runs) {
+        if (r.category) counts.set(r.category, (counts.get(r.category) || 0) + 1);
+        else uncat++;
+      }
+      const prev = catFilter;
+      catSel.innerHTML = "";
+      const allOpt = document.createElement("option");
+      allOpt.value = "";
+      allOpt.textContent = t("全部分类");
+      catSel.appendChild(allOpt);
+      const noneOpt = document.createElement("option");
+      noneOpt.value = "__none__";
+      noneOpt.textContent = t("未分类") + " (" + uncat + ")";
+      catSel.appendChild(noneOpt);
+      for (const c of categories) {
+        const o = document.createElement("option");
+        o.value = c.id;
+        o.textContent = c.name + " (" + (counts.get(c.id) || 0) + ")";
+        catSel.appendChild(o);
+      }
+      catSel.value = [...catSel.options].some(o => o.value === prev) ? prev : "";
+      catFilter = catSel.value;
+    }
+
+    relabelers.push(() => { rebuildFolderOptions(); rebuildCatOptions(); });
 
     const panelTitle = $el("h2");
     bindText(panelTitle, "🗂 资产管理");
@@ -348,6 +456,7 @@ app.registerExtension({
         $el("button.asm-x", { textContent: "✕", onclick: closePanel }),
       ]),
       toolbar,
+      filtersRow,
       body,
       status,
     ]);
@@ -376,6 +485,7 @@ app.registerExtension({
         selected.has(r.dir) ? $el("div.selmark", { textContent: "✓" }) : null,
       ].filter(Boolean)));
       card.appendChild($el("div.meta", {}, [
+        categoryName(r) ? $el("div.cat", { textContent: categoryName(r) }) : null,
         $el("div.nm", { textContent: r.name }),
         $el("div.pr", { textContent: (r.positive || "").slice(0, 160) || t("(未检测到提示词)") }),
         r.models && r.models.length ? $el("div.mo", { textContent: r.models.join(" · ") }) : null,
@@ -477,11 +587,12 @@ app.registerExtension({
 
     // ---------- 多选 / 批量删除 ----------
     function updateBatchBtn() {
-      if (multi && selected.size > 0) {
-        batchBtn.style.display = "";
+      const on = multi && selected.size > 0;
+      batchBtn.style.display = on ? "" : "none";
+      assignBtn.style.display = on ? "" : "none";
+      if (on) {
         batchBtn.textContent = t("🗑 删除选中") + "(" + selected.size + ")";
-      } else {
-        batchBtn.style.display = "none";
+        assignBtn.textContent = t("🏷 移到分类") + "(" + selected.size + ")";
       }
     }
     function toggleMulti() {
@@ -512,6 +623,75 @@ app.registerExtension({
       } else {
         statusMsg(t("批量删除失败: ") + (terr(d.error) || ""));
       }
+    }
+
+    // ---------- 移到分类 ----------
+    async function assignTo(ids, cid) {
+      const res = await fetch("/asset/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ run_ids: ids, category: cid }),
+      });
+      const d = await res.json();
+      if (!d.ok) { statusMsg(terr(d.error) || t("移动失败")); return; }
+      const moved = new Set(d.updated || []);
+      for (const r of runs) if (moved.has(r.dir)) r.category = cid;
+      rebuildCatOptions();
+      refresh();
+      const skipped = (d.skipped || []).length;
+      statusMsg(
+        t("已移动 ") + (d.updated || []).length + t(" 项") +
+        (skipped ? (LANG === "zh" ? "（跳过 " + skipped + " 项）" : " (skipped " + skipped + ")") : "")
+      );
+    }
+
+    function openAssignModal() {
+      if (!selected.size) return;
+      const ids = [...selected];
+      const m = $el("div.asm-modal", { style: { display: "flex" } });
+      m.appendChild($el("div.bk", { onclick: () => m.remove() }));
+      const pn = $el("div.pn", { style: { width: "min(520px,92vw)" } });
+      pn.appendChild($el("button.x", { textContent: "✕", onclick: () => m.remove() }));
+      pn.appendChild($el("h3", { textContent: t("移到分类") + " · " + ids.length + t(" 项") }));
+
+      const list = $el("div.asm-catlist");
+      function mkRow(label, cid) {
+        const b = $el("button.asm-catrow", { textContent: label });
+        b.onclick = async () => { m.remove(); await assignTo(ids, cid); };
+        return b;
+      }
+      list.appendChild(mkRow(t("未分类（移出分类）"), null));
+      for (const c of categories) list.appendChild(mkRow(c.name, c.id));
+      if (!categories.length) {
+        list.appendChild($el("div", {
+          style: { fontSize: "12px", color: "var(--descrip-text,#aaa)" },
+          textContent: t("还没有分类，在下面新建一个"),
+        }));
+      }
+      pn.appendChild(list);
+
+      const input = $el("input.asm-search", { type: "text" });
+      input.placeholder = t("新建分类名称");
+      const createBtn = $el("button.asm-btn.primary");
+      bindText(createBtn, "新建并移入");
+      createBtn.onclick = async () => {
+        const name = input.value.trim();
+        if (!name) return;
+        const res = await fetch("/asset/category", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "create", name }),
+        });
+        const d = await res.json();
+        if (!d.ok) { statusMsg(terr(d.error) || t("新建失败")); return; }
+        categories = d.categories || categories;
+        m.remove();
+        await assignTo(ids, d.category.id);
+      };
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter") createBtn.click(); });
+      pn.appendChild($el("div.asm-newcat", {}, [input, createBtn]));
+      m.appendChild(pn);
+      document.body.appendChild(m);
     }
 
     // ---------- 预览 ----------
@@ -792,6 +972,10 @@ app.registerExtension({
       const res = await fetch("/asset/list");
       const d = await res.json();
       if (d.ok) { runs = d.runs || []; rebuildByDate(); }
+      try {
+        const c = await (await fetch("/asset/categories")).json();
+        if (c.ok) categories = c.categories || [];
+      } catch (e) {}
       try { curConfig = await (await fetch("/asset/config")).json(); } catch (e) {}
     }
     async function openPanel() {
@@ -805,6 +989,8 @@ app.registerExtension({
         const d = runs[0].date;
         calYear = Number(d.slice(0, 4)); calMonth = Number(d.slice(5, 7)) - 1; selDate = d;
       }
+      rebuildFolderOptions();
+      rebuildCatOptions();
       refresh();
       statusMsg(t("共 ") + runs.length + t(" 条资产"));
       if (pollTimer) clearInterval(pollTimer);
@@ -836,6 +1022,8 @@ app.registerExtension({
           rebuildByDate();
           // 清除已不存在的选中项
           for (const s of [...selected]) if (!newDirs.has(s)) selected.delete(s);
+          rebuildFolderOptions();
+          rebuildCatOptions();
           refresh();
           statusMsg(t("已自动更新: 共 ") + runs.length + t(" 条资产"));
         }

@@ -10,8 +10,10 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image, video,
   **自动归档** — 后台线程监视 output 目录并归档图片、视频和音频（可选择导入已有文件），尽可能提取**提示词 / 正负词 / 参数 / 模型与 LoRA / 完整工作流**。读取图片/视频容器元数据，并可回查 ComfyUI 执行记录；PyAV 可用时也会读取音频元数据和时长。
 - **Dual views** — grid view + **calendar view** (grouped by date, with daily image/video/audio count badges; click a day to see that day's assets).<br>
   **双视图浏览** — 网格视图 + **日历视图**（按日期归档，每天显示图片/视频/音频数量徽标，点某天看当天产物）。
-- **Search & filter** — full-text search by prompt/model/filename/date; filter by image/video/audio.<br>
-  **搜索与过滤** — 按提示词/模型/文件名/日期全文搜索，可按图片/视频/音频过滤。
+- **Search & filter** — full-text search by prompt/model/filename/date; filter by image/video/audio, by **source folder**, or by **your own category**.<br>
+  **搜索与过滤** — 按提示词/模型/文件名/日期全文搜索，可按图片/视频/音频、**来源文件夹**、**自建分类**过滤。
+- **Folder & category browsing** — date grouping stays; on top of it you get two more ways to find things: **source folder** (derived automatically from the output subdirectory, zero setup, works on existing archives) and **your own categories** (create any, then multi-select assets and move them in). Moving only rewrites the archive metadata — original files and the archive layout are untouched, so it is instant and reversible.<br>
+  **文件夹与分类浏览** — 日期分组保留，在此基础上多两个查找维度：**来源文件夹**（按 output 子目录自动派生，零操作，历史归档立刻可用）与**自建分类**（自己建，多选后移入）。移动只改归档元数据，不动原始文件、不动归档目录结构，毫秒级且可逆。
 - **Preview & reproduce** — view full-size images, play videos and audio, copy prompt, download `workflow.json` (drag it back onto the canvas to restore the whole workflow).<br>
   **预览与复现** — 查看大图、播放视频和音频、复制提示词、下载 workflow.json（拖回画布还原整套工作流）。
 - **Batch delete** — multi-select and delete from disk in one click (archive copy + original output file); single delete too.<br>
@@ -74,7 +76,11 @@ Download the repo zip and extract it into `ComfyUI/custom_nodes/`, keeping the f
    启动 ComfyUI，顶部菜单栏点「**资产管理**」打开面板。
 2. Top toolbar: search box, grid/calendar toggle, all/image/video/audio filter, multi-select, backup, scan, settings.<br>
    顶部工具栏：搜索框、网格/日历切换、全部/图片/视频/音频过滤、多选、备份、扫描、资产设置。
-3. Click an asset → preview dialog: play audio/video, copy prompt / download workflow.json (drag back to canvas to reproduce) / delete from disk.<br>
+3. Second row: **Folder** and **Category** dropdowns — pick a source folder to see only assets that came from it, or pick one of your categories.<br>
+   第二行：**文件夹** 与 **分类** 下拉框 —— 选来源文件夹只看该目录的产物，或选自己建好的分类。
+4. Select assets (☑ Multi-select) → **Move to category** → pick an existing category or type a new name. Moving rewrites only archive metadata.<br>
+   勾选产物（☑ 多选）→「**移到分类**」→ 选已有分类或直接输入新名字。移动只改归档元数据。
+5. Click an asset → preview dialog: play audio/video, copy prompt / download workflow.json (drag back to canvas to reproduce) / delete from disk.<br>
    点产物 → 预览弹窗：播放音频/视频、复制提示词 / 下载 workflow.json（拖回画布复现）/ 从硬盘删除。
 
 Audio files are auto-archived for `.wav`, `.mp3`, `.flac`, `.ogg`, `.opus`, `.m4a`, `.aac`, `.aiff`, `.aif`, and `.wma`. Playback uses the browser's native audio player, so actual playback depends on the browser's codec support. Audio metadata and duration are best-effort when PyAV is installed; if metadata is absent, ComfyUI execution history is queried for the prompt/workflow.<br>
@@ -119,6 +125,7 @@ machine), the plugin falls back to the defaults and reports the reason via `warn
 
 ```
 <archive dir>/
+├─ categories.json              # your categories (flat list) / 自建分类清单
 └─ 2026-08-12/
    └─ 110358_ComfyUI_00016/
       ├─ ComfyUI_00016_.png       # original asset / 原产物
@@ -127,6 +134,11 @@ machine), the plugin falls back to the defaults and reports the reason via `warn
       ├─ workflow.json            # drag back into ComfyUI to rerun / 拖回 ComfyUI 复跑
       └─ thumb.jpg                # thumbnail (first frame for videos) / 缩略图(视频取首帧)
 ```
+
+`info.json` also carries `folder` (source subdirectory, auto-derived) and `category` (id of your category, or `null`).
+Older records without these fields are derived on the fly from `source_rel`, so no migration is needed.<br>
+`info.json` 还记录 `folder`（来源子目录，自动派生）与 `category`（自建分类 id，未分类为 `null`）。
+老记录缺少这两个字段时由 `source_rel` 即时派生，无需迁移。
 
 ## 📝 Notes · 说明
 

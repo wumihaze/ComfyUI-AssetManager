@@ -123,6 +123,160 @@ def save_state(archive_dir, state):
     os.replace(tmp, fp)
 
 
+# ---------------------------------------------------------------------------
+# 分类: 文件夹(自动派生) 与 我的分类(手动, 平铺一层)
+# ---------------------------------------------------------------------------
+
+CATEGORY_NAME_MAX = 40
+CATEGORY_LIMIT = 200
+
+
+def categories_file(archive_dir):
+    return Path(archive_dir) / "categories.json"
+
+
+def _clean_category_name(name):
+    if not isinstance(name, str):
+        return ""
+    name = "".join(ch for ch in name if ch.isprintable()).strip()
+    return name[:CATEGORY_NAME_MAX]
+
+
+def load_categories(archive_dir):
+    """读取分类清单, 对损坏/异常内容保持容错, 只返回结构合法的条目。"""
+    try:
+        raw = json.loads(categories_file(archive_dir).read_text(encoding="utf-8"))
+    except Exception:
+        return {"categories": []}
+    items = raw.get("categories") if isinstance(raw, dict) else None
+    if not isinstance(items, list):
+        return {"categories": []}
+    seen, out = set(), []
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            continue
+        cid, name = item.get("id"), _clean_category_name(item.get("name"))
+        if not isinstance(cid, str) or not cid or cid in seen or not name:
+            continue
+        seen.add(cid)
+        order = item.get("order")
+        out.append({"id": cid, "name": name, "order": order if isinstance(order, int) else idx})
+    out.sort(key=lambda c: c["order"])
+    return {"categories": out[:CATEGORY_LIMIT]}
+
+
+def save_categories(archive_dir, data):
+    fp = categories_file(archive_dir)
+    tmp = Path(str(fp) + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.replace(tmp, fp)
+
+
+def create_category(archive_dir, name):
+    name = _clean_category_name(name)
+    if not name:
+        return {"ok": False, "error": "Category name is required"}
+    data = load_categories(archive_dir)
+    items = data["categories"]
+    if len(items) >= CATEGORY_LIMIT:
+        return {"ok": False, "error": "Too many categories"}
+    if any(c["name"].casefold() == name.casefold() for c in items):
+        return {"ok": False, "error": "Category already exists"}
+    cid = uuid.uuid4().hex[:8]
+    items.append({"id": cid, "name": name, "order": len(items)})
+    save_categories(archive_dir, data)
+    return {"ok": True, "category": {"id": cid, "name": name}, "categories": items}
+
+
+def rename_category(archive_dir, category_id, name):
+    name = _clean_category_name(name)
+    if not name:
+        return {"ok": False, "error": "Category name is required"}
+    data = load_categories(archive_dir)
+    for item in data["categories"]:
+        if item["id"] == category_id:
+            item["name"] = name
+            save_categories(archive_dir, data)
+            return {"ok": True, "categories": data["categories"]}
+    return {"ok": False, "error": "Category not found"}
+
+
+def delete_category(archive_dir, category_id):
+    data = load_categories(archive_dir)
+    keep = [c for c in data["categories"] if c["id"] != category_id]
+    if len(keep) == len(data["categories"]):
+        return {"ok": False, "error": "Category not found"}
+    data["categories"] = keep
+    save_categories(archive_dir, data)
+    return {"ok": True, "categories": keep}
+
+
+def resolve_folder(info):
+    """返回归档记录所属文件夹: 优先 info.folder, 缺失时由 source_rel 派生。"""
+    folder = info.get("folder") if isinstance(info, dict) else None
+    if isinstance(folder, str) and folder.strip() and folder.strip() != ".":
+        return folder.strip().replace("\\", "/").strip("/")
+    rel = info.get("source_rel") if isinstance(info, dict) else None
+    if not isinstance(rel, str):
+        return ""
+    parent = str(Path(rel).parent).replace("\\", "/")
+    return "" if parent in (".", "") else parent.strip("/")
+
+
+def _run_dir_for(archive_dir, run_id):
+    """校验 run_id 并返回归档目录内的任务目录, 不合法则返回 None。"""
+    arch = Path(archive_dir).resolve()
+    if not isinstance(run_id, str) or not run_id.strip():
+        return None
+    try:
+        run_dir = (arch / run_id).resolve(strict=True)
+        run_dir.relative_to(arch)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if run_dir == arch or run_dir.is_symlink() or not run_dir.is_dir():
+        return None
+    return run_dir
+
+
+def assign_category(archive_dir, run_ids, category_id):
+    """把一组归档记录改到指定分类 (category_id=None 表示移出分类)。
+
+    只改 info.json, 不动媒体文件、不移动归档目录, 因此毫秒级且可随时改回。
+    """
+    if not isinstance(run_ids, list):
+        return {"ok": False, "error": "run_ids must be an array"}
+    if len(run_ids) > 500:
+        return {"ok": False, "error": "too many run_ids (max 500)"}
+    if category_id is not None:
+        known = {c["id"] for c in load_categories(archive_dir)["categories"]}
+        if category_id not in known:
+            return {"ok": False, "error": "Category not found"}
+    updated, skipped = [], []
+    for run_id in run_ids:
+        run_dir = _run_dir_for(archive_dir, run_id)
+        if not run_dir:
+            skipped.append({"run": run_id, "reason": "invalid path"})
+            continue
+        info_file = run_dir / "info.json"
+        if info_file.is_symlink() or not info_file.is_file():
+            skipped.append({"run": run_id, "reason": "missing info.json"})
+            continue
+        try:
+            info = json.loads(info_file.read_text(encoding="utf-8"))
+        except Exception:
+            skipped.append({"run": run_id, "reason": "unreadable info.json"})
+            continue
+        if not isinstance(info, dict):
+            skipped.append({"run": run_id, "reason": "invalid info.json"})
+            continue
+        info["category"] = category_id
+        tmp = info_file.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, info_file)
+        updated.append(run_id)
+    return {"ok": True, "updated": updated, "skipped": skipped}
+
+
 def path_is_within(path, root):
     """Return whether the resolved path is equal to or below root."""
     try:
@@ -463,6 +617,8 @@ def archive_file(rel, src, archive_dir, state, cfg, prompt_resolver=None, source
         "archived_at": datetime.now().isoformat(timespec="seconds"),
         "generated_at": mtime.isoformat(timespec="seconds"),
         "source_rel": rel,
+        "folder": resolve_folder({"source_rel": rel}),
+        "category": None,
         "media": media_name,
         "kind": kind,
         "file_size": st.st_size,
@@ -626,6 +782,8 @@ def list_runs(archive_dir):
                 "time": generated_at,
                 "name": info.get("source_rel") if isinstance(info.get("source_rel"), str) else run_dir.name,
                 "kind": kind,
+                "folder": resolve_folder(info),
+                "category": info.get("category") if isinstance(info.get("category"), str) else None,
                 "media": media,
                 "media_duration": info.get("media_duration") if isinstance(info.get("media_duration"), (int, float)) else None,
                 "thumb": thumb,

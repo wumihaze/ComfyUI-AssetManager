@@ -23,7 +23,7 @@ WEB_DIRECTORY = "web"
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 
-__version__ = "1.0.6"
+__version__ = "1.0.7"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _cfg = assets_core.load_config(BASE_DIR)
@@ -323,6 +323,72 @@ async def asset_delete_batch(request):
                 else:
                     failed.append(rid)
         return {"ok": True, "deleted": deleted, "failed": failed}
+
+    result = await asyncio.to_thread(_go)
+    return web.json_response(result)
+
+
+# ---------------------------------------------------------------------------
+# 分类: 我的分类(手动) / 归档到分类
+# ---------------------------------------------------------------------------
+
+@PromptServer.instance.routes.get("/asset/categories")
+async def asset_categories(request):
+    data = await asyncio.to_thread(assets_core.load_categories, _arch)
+    return web.json_response({"ok": True, "categories": data["categories"]})
+
+
+@PromptServer.instance.routes.post("/asset/category")
+async def asset_category(request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        return web.json_response({"ok": False, "error": "Request body must be a JSON object"})
+    action = body.get("action")
+    name = body.get("name")
+    category_id = body.get("id")
+    if category_id is not None and not isinstance(category_id, str):
+        return web.json_response({"ok": False, "error": "id must be a string"})
+    if name is not None and not isinstance(name, str):
+        return web.json_response({"ok": False, "error": "name must be a string"})
+
+    def _go():
+        with _LOCK:
+            if action == "create":
+                return assets_core.create_category(_arch, name)
+            if action == "rename":
+                return assets_core.rename_category(_arch, category_id, name)
+            if action == "delete":
+                return assets_core.delete_category(_arch, category_id)
+            return {"ok": False, "error": "Unknown action"}
+
+    result = await asyncio.to_thread(_go)
+    return web.json_response(result)
+
+
+@PromptServer.instance.routes.post("/asset/assign")
+async def asset_assign(request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        return web.json_response({"ok": False, "error": "Request body must be a JSON object"})
+    run_ids = body.get("run_ids") or []
+    if not isinstance(run_ids, list):
+        return web.json_response({"ok": False, "error": "run_ids must be an array"})
+    run_ids = [r for r in run_ids if isinstance(r, str)]
+    if len(run_ids) > 500:
+        return web.json_response({"ok": False, "error": "too many run_ids (max 500)"})
+    category = body.get("category")
+    if category is not None and not isinstance(category, str):
+        return web.json_response({"ok": False, "error": "category must be a string or null"})
+
+    def _go():
+        with _LOCK:
+            return assets_core.assign_category(_arch, run_ids, category)
 
     result = await asyncio.to_thread(_go)
     return web.json_response(result)
