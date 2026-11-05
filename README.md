@@ -29,7 +29,7 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image, video,
 - **One-click backup** — package "asset library + workflows + plugin config" into a zip.<br>
   **一键备份** — 把「资产库 + 工作流 + 插件配置」打包成 zip。
 
-## 📸 Screenshots · 界面预览
+## Screenshots · 界面预览
 
 > 截图取自演示归档（程序化生成的抽象画），只用于展示界面。
 
@@ -45,7 +45,7 @@ An in-panel **asset manager** for ComfyUI that auto-archives every image, video,
 |---|---|
 | ![Browse](assets/screenshots/05-browse-dir.png) | ![Preview](assets/screenshots/03-preview.png) |
 
-## 📦 Installation · 安装
+## Installation · 安装
 
 ### Method 1: ComfyUI-Manager (recommended) · 方法一：ComfyUI-Manager（推荐）
 
@@ -67,7 +67,7 @@ Download the repo zip and extract it into `ComfyUI/custom_nodes/`, keeping the f
 > Dependencies: Python ≥ 3.9, `Pillow`, and PyAV (`av>=10.0.0`). Audio archiving and browser playback still work if PyAV is unavailable, but embedded audio metadata/duration and video thumbnails will be unavailable.<br>
 > 依赖：Python ≥ 3.9、`Pillow` 和 PyAV（`av>=10.0.0`）。即使 PyAV 不可用，音频仍可归档和在浏览器播放，但无法读取音频容器元数据/时长或生成视频缩略图。
 
-## 🚀 Usage · 使用
+## Usage · 使用
 
 1. Start ComfyUI and click "**Asset Manager**" in the top menu bar to open the panel.<br>
    启动 ComfyUI，顶部菜单栏点「**资产管理**」打开面板。
@@ -75,22 +75,22 @@ Download the repo zip and extract it into `ComfyUI/custom_nodes/`, keeping the f
    顶部工具栏：搜索框、网格/日历切换、全部/图片/视频/音频过滤、多选、备份、扫描、资产设置。
 3. Left sidebar: one **My categories** tree that takes the full height. Sub-categories are indented with a blue bar, and a parent's count includes its children. Click any row to filter the grid; click "All categories" to clear. **Source folders** sits collapsed at the bottom — click its header to expand (it remembers the active folder filter and shows it as a chip with a ✕ to clear).<br>
    左侧导航：一棵占满高度的 **我的分类** 树。子分类缩进并带蓝色竖条，父分类的条数包含其子分类。点任意一行右侧立刻只剩该范围，点「全部分类」恢复。**来源文件夹** 默认收在底部，点标题展开；已选的文件夹筛选会显示成小标签，点 ✕ 清除。
-4. Multi-select: click ☑ Multi-select to enter it, or just **Ctrl/Cmd+click** / **Shift+click** on any asset — both switch to multi-select automatically. **Shift+click** selects the whole range from the last clicked asset, **Ctrl+click** toggles one, and **dragging on empty space** draws a box that selects everything it touches (hold Ctrl/Shift to add to the current selection instead of replacing it).<br>
-   多选：点「☑ 多选」进入，也可以直接 **Ctrl/Cmd + 单击** 或 **Shift + 单击**，会自动切进多选。**Shift + 单击** 从上次点击的产物起整段连选，**Ctrl + 单击** 单个加/减，**在空白处拖拽** 拉框选中框到的全部（按住 Ctrl/Shift 是在现有选择上追加，不覆盖）。
+4. Multi-select: click Multi-select to enter it, or just **Ctrl/Cmd+click** / **Shift+click** on any asset — both switch to multi-select automatically. **Shift+click** selects the whole range from the last clicked asset, **Ctrl+click** toggles one, and **dragging on empty space** draws a box that selects everything it touches (hold Ctrl/Shift to add to the current selection instead of replacing it).<br>
+   多选：点「多选」进入，也可以直接 **Ctrl/Cmd + 单击** 或 **Shift + 单击**，会自动切进多选。**Shift + 单击** 从上次点击的产物起整段连选，**Ctrl + 单击** 单个加/减，**在空白处拖拽** 拉框选中框到的全部（按住 Ctrl/Shift 是在现有选择上追加，不覆盖）。
 5. Select assets → **Move to category** → a dialog lists your categories as radio rows (the one your assets already belong to is marked **current**), with a search box once there are many, a separate **Uncategorized (clear)** action at the bottom, and a create-and-move row. Moving rewrites only archive metadata.<br>
    勾选产物 →「**移到分类**」→ 弹窗把分类列成单选项（这些产物当前所属的分类会标 **当前**），分类多了会显示搜索框，底部单独一条 **未分类（移出分类）**，以及新建并移入。移动只改归档元数据。
-6. **⚙ Manage categories** (the gear in the My categories header) → rename (✎), delete (✕), or create. On a top-level row, **＋** adds a sub-category right under it. **📌 pins a category to the top** (it shows a pin in the sidebar too) and **↑ ↓ reorder** it among its siblings; ordering is per level and per pin state, so a pinned category can't be pushed below an unpinned one by accident. Deleting a category never deletes files: its assets become uncategorized and its sub-categories move up one level.<br>
-   分类区标题旁的 **⚙** → 重命名（✎）/ 删除（✕）/ 新建。一级分类行上的 **＋** 直接在它下面建子分类。**📌 置顶**（侧栏也会显示图钉），**↑ ↓ 调整顺序**；排序按「同一层 + 同一置顶状态」分组，所以置顶的分类不会被 ↑ 挤到未置顶区里去。删除分类**不会删除文件**：该分类下的产物变回「未分类」，它的子分类上移一层。
+6. **Manage categories** (the gear in the My categories header) → rename (✎), delete (✕), or create. On a top-level row, **＋** adds a sub-category right under it. The pin button **pins a category to the top** (it shows a pin in the sidebar too), and **↑ ↓ reorder** it among its siblings; ordering is per level and per pin state, so a pinned category can't be pushed below an unpinned one by accident. Deleting a category never deletes files: its assets become uncategorized and its sub-categories move up one level.<br>
+   分类区标题旁的齿轮按钮 → 重命名（✎）/ 删除（✕）/ 新建。一级分类行上的 **＋** 直接在它下面建子分类。**置顶**（侧栏也会显示图钉），**↑ ↓ 调整顺序**；排序按「同一层 + 同一置顶状态」分组，所以置顶的分类不会被 ↑ 挤到未置顶区里去。删除分类**不会删除文件**：该分类下的产物变回「未分类」，它的子分类上移一层。
 7. Click an asset → preview dialog: play audio/video, copy prompt / download workflow.json (drag back to canvas to reproduce) / delete from disk.<br>
    点产物 → 预览弹窗：播放音频/视频、复制提示词 / 下载 workflow.json（拖回画布复现）/ 从硬盘删除。
 
 Audio files are auto-archived for `.wav`, `.mp3`, `.flac`, `.ogg`, `.opus`, `.m4a`, `.aac`, `.aiff`, `.aif`, and `.wma`. Playback uses the browser's native audio player, so actual playback depends on the browser's codec support. Audio metadata and duration are best-effort when PyAV is installed; if metadata is absent, ComfyUI execution history is queried for the prompt/workflow.<br>
 音频自动归档支持 `.wav`、`.mp3`、`.flac`、`.ogg`、`.opus`、`.m4a`、`.aac`、`.aiff`、`.aif` 和 `.wma`。预览使用浏览器原生播放器，具体能否播放取决于浏览器支持的编码格式。安装 PyAV 时会尽力读取音频元数据和时长；文件没有提示词时会尝试从 ComfyUI 执行记录回查提示词/工作流。
 
-## ⚙️ Configuration · 配置
+## Configuration · 配置
 
-A `config.json` is generated on your first settings save (template at [`config.example.json`](config.example.json)). Everything can also be changed in the panel's "⚙ Settings".<br>
-首次保存设置时自动生成 `config.json`（模板见 [`config.example.json`](config.example.json)）。所有配置也可在面板「⚙ 资产设置」里直接改：
+A `config.json` is generated on your first settings save (template at [`config.example.json`](config.example.json)). Everything can also be changed in the panel's "Settings".<br>
+首次保存设置时自动生成 `config.json`（模板见 [`config.example.json`](config.example.json)）。所有配置也可在面板「资产设置」里直接改：
 
 | Key · 键 | Description · 说明 |
 |---|---|
@@ -102,10 +102,10 @@ A `config.json` is generated on your first settings save (template at [`config.e
 | `thumb_width` | Thumbnail width (px) / 缩略图宽度(px) |
 | `interval_sec` | Archive scan interval (seconds) / 归档扫描间隔(秒) |
 
-> ℹ️ 视频元数据/缩略图以及音频元数据读取使用 **PyAV** 在进程内完成，不会启动 ffmpeg/ffprobe 外部进程。
+> 视频元数据/缩略图以及音频元数据读取使用 **PyAV** 在进程内完成，不会启动 ffmpeg/ffprobe 外部进程。
 > 如果 PyAV 不可用，仍可归档和播放音频，但无法提取容器元数据/时长或生成视频缩略图。
 
-### 📍 安装位置与盘符 · Install location
+### 安装位置与盘符 · Install location
 
 代码里**没有任何写死的盘符或绝对路径**，三个目录都在运行时确定：
 
@@ -113,7 +113,7 @@ A `config.json` is generated on your first settings save (template at [`config.e
 - 默认归档/备份：`<ComfyUI>/asset_archive`、`<ComfyUI>/asset_backups`（由插件目录 `../..` 推导）；
 - 默认输出：`folder_paths.get_output_directory()`，即 ComfyUI 自己探测到的 output。
 
-三个目录都可在面板「⚙ 资产设置」里改成任意位置（**由用户自主选择**）。若 `config.json` 里残留了
+三个目录都可在面板「资产设置」里改成任意位置（**由用户自主选择**）。若 `config.json` 里残留了
 另一台机器或已移除盘符的路径，插件启动时会自动回退到上面的默认目录，并通过 `/asset/config` 的
 `warnings` 字段说明原因——不会因为一个坏路径导致插件加载失败。
 
@@ -122,7 +122,7 @@ directories are derived from the plugin location, and the output directory comes
 are user-configurable in settings; if a configured path is unavailable (e.g. the plugin was copied from another
 machine), the plugin falls back to the defaults and reports the reason via `warnings` instead of failing to load.
 
-## 📁 Directory structure · 归档目录结构
+## Directory structure · 归档目录结构
 
 ```
 <archive dir>/
@@ -145,14 +145,14 @@ Older records without these fields are derived on the fly from `source_rel`, so 
 `categories.json` keeps each category's `order` and `pinned` flag next to its `id` / `name` / `parent`. Files written by older versions have neither, so their order falls back to the position in the file — no migration needed.<br>
 `categories.json` 里除了 `id` / `name` / `parent`，还记录 `order`（排序）和 `pinned`（是否置顶）。老版本写出的文件没有这两个字段，会按它在文件里的先后顺序显示，无需迁移。
 
-## 📝 Notes · 说明
+## Notes · 说明
 
 - Archiving is a **copy**; it doesn't affect ComfyUI previews. Files are only touched on disk when you delete them.<br>
   归档是**复制**，不影响 ComfyUI 预览；删除时才真正动硬盘。
 - The archive directory can be migrated anytime — just change `archive_dir` in settings (old data stays where it was).<br>
   归档目录可随时迁移，只要在设置里改 `archive_dir` 即可（旧数据保留在原目录）。
 
-### 🔍 为什么有的产物"未检测到提示词"？ · Troubleshooting prompt extraction
+### 为什么有的产物"未检测到提示词"？ · Troubleshooting prompt extraction
 
 提示词优先从**文件内嵌元数据**读取（PNG `tEXt` / WebP `EXIF` / MP4-MKV ffmpeg tag）。
 文件里没有元数据时，插件会再从 **ComfyUI 服务端执行记录**里按文件名找回当时那次执行的
@@ -165,13 +165,13 @@ carry their prompt.
 
 | 提示 | 含义 | 怎么办 |
 |---|---|---|
-| ⚠ 文件本身不带 ComfyUI 元数据 | 图片不是 ComfyUI 直接存的：浏览器另存、手机/微信转存后拖进 output 目录；或 ComfyUI 启动时带了 `--disable-metadata`（隐私模式） | 用「保存图像 / SaveImage」节点跑出来的图会自动归档并带上提示词；若用了 `--disable-metadata`，去掉该参数即可 |
+| 文件本身不带 ComfyUI 元数据 | 图片不是 ComfyUI 直接存的：浏览器另存、手机/微信转存后拖进 output 目录；或 ComfyUI 启动时带了 `--disable-metadata`（隐私模式） | 用「保存图像 / SaveImage」节点跑出来的图会自动归档并带上提示词；若用了 `--disable-metadata`，去掉该参数即可 |
 | 这次运行没有文本提示词节点 | 工作流里确实没有 CLIPTextEncode 一类节点（纯图像处理、证件照、放大等工作流） | 正常现象，无需处理 |
 | 提示词由 ComfyUI 执行记录找回 | 文件本身没写元数据，但已从服务端历史补回 | 正常现象（说明该文件不带元数据，但提示词已找回） |
 
 > 注：归档是复制原始文件，**不会**给你的图片补写元数据；找回的提示词只写进归档目录的
 > `info.json` / `prompt.txt` / `workflow.json`。
 
-## 📄 License
+## License
 
 [MIT](LICENSE) © 2026 Wumihaze
