@@ -18,6 +18,7 @@ import tempfile
 import threading
 import types
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
@@ -40,6 +41,15 @@ def write_bytes(path, data=b"\x89PNG\r\n\x1a\nfake"):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return path
+
+
+def date_dir_of(path):
+    """归档按源文件的 mtime 分日期目录。
+
+    用例里不能写死 "2026-11-05": 那样只在当天成立, 跨零点就红(而且看起来像
+    代码坏了)。跟着 mtime 算, 和 archive_file 用的是同一个来源。
+    """
+    return datetime.fromtimestamp(Path(path).stat().st_mtime).strftime("%Y-%m-%d")
 
 
 def make_run(archive_dir, rel_dir, source_rel="a.png", extra=None):
@@ -257,20 +267,22 @@ class ArchivePathSafetyTests(unittest.TestCase):
             self.assertEqual(victim_info.read_text(encoding="utf-8"), '{"keep": "me"}')
 
     def test_merge_ignores_index_pointing_at_a_file_not_a_dir(self):
-        write_bytes(self.arch / "2026-11-05", b"i am a file")
-        write_bytes(self.out / "a.png", b"payload")
-        h = assets_core.file_content_hash(self.out / "a.png")
-        self.state["__content__"] = {h: "2026-11-05/x"}
+        src = write_bytes(self.out / "a.png", b"payload")
+        day = date_dir_of(src)
+        write_bytes(self.arch / day, b"i am a file")
+        h = assets_core.file_content_hash(src)
+        self.state["__content__"] = {h: day + "/x"}
         r = self.archive("a.png")
         # 记录不了(日期位置被文件占住), 但不能抛异常, 也不能改坏那个文件
         self.assertIsNone(r)
-        self.assertEqual((self.arch / "2026-11-05").read_bytes(), b"i am a file")
+        self.assertEqual((self.arch / day).read_bytes(), b"i am a file")
 
     def test_scan_survives_a_blocked_date_dir(self):
         """某一天的目录被同名文件占住时, 扫描不能整体崩掉(路由会 500)。"""
-        write_bytes(self.arch / "2026-11-05", b"i am a file")
+        src = write_bytes(self.out / "a.png", b"payload")
+        day = date_dir_of(src)
+        write_bytes(self.arch / day, b"i am a file")
         self.state["__baseline_done__"] = True
-        write_bytes(self.out / "a.png", b"payload")
         self.assertEqual(assets_core.scan_all(self.out, self.arch, self.state, CFG), 0)
         self.assertNotIn("a.png", self.state)
 
