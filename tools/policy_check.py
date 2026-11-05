@@ -275,9 +275,15 @@ def check_comfyignore():
 def run_tests():
     r = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests"],
                        cwd=str(ROOT), capture_output=True, text=True)
-    tail = (r.stderr or "").strip().splitlines()
-    summary = tail[-1] if tail else ""
-    check(r.returncode == 0, "单元测试全过", summary or "(无输出)")
+    out = (r.stderr or "") + (r.stdout or "")
+    if r.returncode == 0:
+        tail = out.strip().splitlines()
+        check(True, "单元测试全过", tail[-1] if tail else "(无输出)")
+        return
+    # 失败时把用例名点出来, 否则 CI 上只知道"红了"不知道红在哪
+    names = [l.split(" (")[0].replace("FAIL: ", "").replace("ERROR: ", "")
+             for l in out.splitlines() if l.startswith(("FAIL:", "ERROR:"))]
+    check(False, "单元测试全过", "失败: " + ", ".join(names[:6]) if names else out.strip()[-300:])
 
 
 def run_http_smoke():
