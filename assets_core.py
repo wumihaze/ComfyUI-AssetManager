@@ -195,6 +195,9 @@ def rename_category(archive_dir, category_id, name):
     data = load_categories(archive_dir)
     for item in data["categories"]:
         if item["id"] == category_id:
+            if any(c["id"] != category_id and c["name"].casefold() == name.casefold()
+                   for c in data["categories"]):
+                return {"ok": False, "error": "Category already exists"}
             item["name"] = name
             save_categories(archive_dir, data)
             return {"ok": True, "categories": data["categories"]}
@@ -202,13 +205,36 @@ def rename_category(archive_dir, category_id, name):
 
 
 def delete_category(archive_dir, category_id):
+    """删除分类, 并把该分类下的归档记录改回未分类(避免留下悬空 id)。"""
     data = load_categories(archive_dir)
     keep = [c for c in data["categories"] if c["id"] != category_id]
     if len(keep) == len(data["categories"]):
         return {"ok": False, "error": "Category not found"}
     data["categories"] = keep
     save_categories(archive_dir, data)
-    return {"ok": True, "categories": keep}
+    cleared = _clear_category_from_runs(archive_dir, category_id)
+    return {"ok": True, "categories": keep, "cleared": cleared}
+
+
+def _clear_category_from_runs(archive_dir, category_id):
+    """把指定分类从所有归档记录上摘掉, 只改 info.json, 不动媒体文件。"""
+    arch = Path(archive_dir).resolve()
+    cleared = 0
+    for info_file in arch.glob("*/*/info.json"):
+        try:
+            if info_file.is_symlink() or not info_file.is_file():
+                continue
+            info = json.loads(info_file.read_text(encoding="utf-8"))
+            if not isinstance(info, dict) or info.get("category") != category_id:
+                continue
+            info["category"] = None
+            tmp = info_file.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(tmp, info_file)
+            cleared += 1
+        except Exception:
+            continue
+    return cleared
 
 
 def resolve_folder(info):

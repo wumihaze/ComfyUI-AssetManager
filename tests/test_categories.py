@@ -1,6 +1,7 @@
 """分类功能测试: 文件夹自动派生、我的分类增删改、归档记录改分类。"""
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -78,6 +79,22 @@ class CategoryStoreTests(unittest.TestCase):
             self.assertEqual(assets_core.load_categories(td)["categories"], [])
             self.assertFalse(assets_core.delete_category(td, cid)["ok"])
 
+    def test_rename_to_existing_name_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            a = assets_core.create_category(td, "场景")["category"]["id"]
+            b = assets_core.create_category(td, "角色")["category"]["id"]
+            clash = assets_core.rename_category(td, b, "场景")
+            self.assertFalse(clash["ok"])
+            self.assertIn("exists", clash["error"])
+            # 改回自己的名字(仅大小写/空格不同)不应被拦
+            self.assertTrue(assets_core.rename_category(td, a, " 场景 ")["ok"])
+
+    def test_name_is_sanitised_and_capped(self):
+        with tempfile.TemporaryDirectory() as td:
+            self.assertFalse(assets_core.create_category(td, "\x00\x01\n\t")["ok"])
+            long_name = assets_core.create_category(td, "长" * 200)["category"]["name"]
+            self.assertEqual(len(long_name), assets_core.CATEGORY_NAME_MAX)
+
     def test_corrupt_file_does_not_raise(self):
         with tempfile.TemporaryDirectory() as td:
             (Path(td) / "categories.json").write_text("{not json", encoding="utf-8")
@@ -118,6 +135,45 @@ class AssignCategoryTests(unittest.TestCase):
             self.assertEqual(result["updated"], [])
             self.assertEqual(result["skipped"][0]["reason"], "invalid path")
             self.assertFalse(outside.exists())
+
+    def test_list_dir_field_is_the_assign_contract(self):
+        """前端传的是 list_runs 的 dir 字段, 二者必须对得上。"""
+        with tempfile.TemporaryDirectory() as td:
+            make_run(td, "2026-11-05/run-1")
+            cid = assets_core.create_category(td, "场景概念")["category"]["id"]
+            run = assets_core.list_runs(td)[0]
+            self.assertEqual(run["dir"], "2026-11-05/run-1")
+            result = assets_core.assign_category(td, [run["dir"]], cid)
+            self.assertEqual(result["updated"], [run["dir"]])
+            self.assertEqual(assets_core.list_runs(td)[0]["category"], cid)
+
+    def test_bare_run_name_is_rejected(self):
+        """只给目录名(不带日期层)不能命中, 避免同名歧义。"""
+        with tempfile.TemporaryDirectory() as td:
+            make_run(td, "2026-11-05/run-1")
+            cid = assets_core.create_category(td, "场景概念")["category"]["id"]
+            result = assets_core.assign_category(td, ["run-1"], cid)
+            self.assertEqual(result["updated"], [])
+            self.assertEqual(result["skipped"][0]["reason"], "invalid path")
+
+    def test_symlinked_run_dir_is_skipped(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "real-run"
+            make_run(td, "real-run")
+            link_parent = Path(td) / "2026-11-05"
+            link_parent.mkdir()
+            link = link_parent / "run-link"
+            try:
+                os.symlink(target, link, target_is_directory=True)
+            except (OSError, NotImplementedError, AttributeError):
+                self.skipTest("symlink not permitted on this platform")
+            cid = assets_core.create_category(td, "场景概念")["category"]["id"]
+            result = assets_core.assign_category(td, ["2026-11-05/run-link"], cid)
+            self.assertEqual(result["updated"], [])
+            self.assertEqual(result["skipped"][0]["reason"], "invalid path")
+            # 软链目标本身不能被改写
+            info = json.loads((target / "info.json").read_text(encoding="utf-8"))
+            self.assertNotIn("category", info)
 
     def test_missing_info_json_is_skipped(self):
         with tempfile.TemporaryDirectory() as td:

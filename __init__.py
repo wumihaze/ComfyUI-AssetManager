@@ -355,14 +355,17 @@ async def asset_category(request):
         return web.json_response({"ok": False, "error": "name must be a string"})
 
     def _go():
-        with _LOCK:
-            if action == "create":
-                return assets_core.create_category(_arch, name)
-            if action == "rename":
-                return assets_core.rename_category(_arch, category_id, name)
-            if action == "delete":
-                return assets_core.delete_category(_arch, category_id)
-            return {"ok": False, "error": "Unknown action"}
+        try:
+            with _LOCK:
+                if action == "create":
+                    return assets_core.create_category(_arch, name)
+                if action == "rename":
+                    return assets_core.rename_category(_arch, category_id, name)
+                if action == "delete":
+                    return assets_core.delete_category(_arch, category_id)
+                return {"ok": False, "error": "Unknown action"}
+        except Exception as exc:  # 归档目录不可写/不存在时不要抛 500
+            return {"ok": False, "error": "Category operation failed: %s" % exc}
 
     result = await asyncio.to_thread(_go)
     return web.json_response(result)
@@ -387,8 +390,11 @@ async def asset_assign(request):
         return web.json_response({"ok": False, "error": "category must be a string or null"})
 
     def _go():
-        with _LOCK:
-            return assets_core.assign_category(_arch, run_ids, category)
+        try:
+            with _LOCK:
+                return assets_core.assign_category(_arch, run_ids, category)
+        except Exception as exc:  # 同上: 失败也返回结构化 JSON
+            return {"ok": False, "error": "Assign failed: %s" % exc}
 
     result = await asyncio.to_thread(_go)
     return web.json_response(result)

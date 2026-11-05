@@ -80,7 +80,9 @@ Download the repo zip and extract it into `ComfyUI/custom_nodes/`, keeping the f
    第二行：**文件夹** 与 **分类** 下拉框 —— 选来源文件夹只看该目录的产物，或选自己建好的分类。
 4. Select assets (☑ Multi-select) → **Move to category** → pick an existing category or type a new name. Moving rewrites only archive metadata.<br>
    勾选产物（☑ 多选）→「**移到分类**」→ 选已有分类或直接输入新名字。移动只改归档元数据。
-5. Click an asset → preview dialog: play audio/video, copy prompt / download workflow.json (drag back to canvas to reproduce) / delete from disk.<br>
+5. **⚙ Manage categories** (next to the Category dropdown) → rename (✎) or delete (✕) any category, or create a new one. Deleting a category never deletes files: its assets simply become uncategorized.<br>
+   分类下拉框旁的「**⚙ 管理分类**」→ 重命名（✎）/ 删除（✕）任意分类，也可直接新建。删除分类**不会删除文件**，该分类下的产物只会变回「未分类」。
+6. Click an asset → preview dialog: play audio/video, copy prompt / download workflow.json (drag back to canvas to reproduce) / delete from disk.<br>
    点产物 → 预览弹窗：播放音频/视频、复制提示词 / 下载 workflow.json（拖回画布复现）/ 从硬盘删除。
 
 Audio files are auto-archived for `.wav`, `.mp3`, `.flac`, `.ogg`, `.opus`, `.m4a`, `.aac`, `.aiff`, `.aif`, and `.wma`. Playback uses the browser's native audio player, so actual playback depends on the browser's codec support. Audio metadata and duration are best-effort when PyAV is installed; if metadata is absent, ComfyUI execution history is queried for the prompt/workflow.<br>
@@ -191,6 +193,12 @@ carry their prompt.
   同一秒并发备份不会互相覆盖。
 - **目录浏览最小化**：在允许根的父级链上只列出"通往允许根"的那一级目录名，
   不泄露同级无关目录；隐藏项与符号链接不列出。
+- **分类接口加固**（v1.0.7 起）：`/asset/category` 与 `/asset/assign` 拒绝非对象请求体、
+  校验 `action` / `id` / `name` / `run_ids` 的类型与长度上限（名称 ≤40 字符、单次 ≤500 条）；
+  分类名只当纯字符串存储，不参与任何路径拼接（写 `../..` 也只会得到一个名字），
+  前端一律用 `textContent` 渲染，不存在把分类名当 HTML 执行的路径。
+  `run_ids` 会逐个 `resolve()` 并校验解析后仍在归档目录内，`../`、绝对路径、
+  软链接目录一律跳过并回报 `invalid path`；删除分类只把记录改回未分类，不删任何文件。
 
 No external process is ever launched: video metadata and thumbnails are handled in-process with
 PyAV, and the codebase contains no `subprocess` / `os.system` / `eval` / `exec`. Configuration keys

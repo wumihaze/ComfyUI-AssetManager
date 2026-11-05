@@ -24,6 +24,13 @@ const STYLE = `
 .asm-catrow:hover { border-color:#5b8cff; }
 .asm-newcat { display:flex; gap:8px; align-items:center; }
 .asm-newcat input { flex:1; min-width:120px; }
+.asm-catrow.manage { display:flex; align-items:center; gap:8px; cursor:default; }
+.asm-catrow .catname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.asm-catrow .catcount { font-size:11px; color:var(--descrip-text,#aaa); }
+.asm-mini { background:var(--comfy-input-bg,#333); border:1px solid var(--border-color,#444); color:var(--fg-color,#eee); border-radius:6px; padding:4px 9px; font-size:12px; cursor:pointer; }
+.asm-mini:hover { border-color:#5b8cff; }
+.asm-mini.danger { color:#ff8b82; border-color:rgba(179,55,47,.6); }
+.asm-mini-input { flex:1; min-width:0; background:var(--comfy-input-bg,#333); border:1px solid var(--border-color,#444); color:var(--input-text,#eee); border-radius:6px; padding:6px 8px; font-size:13px; }
 .asm-body { flex:1; overflow:auto; padding:14px; }
 .asm-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; }
 .asm-card { background:var(--comfy-input-bg,#2a2a2a); border:1px solid var(--border-color,#444); border-radius:8px; overflow:hidden; cursor:pointer; }
@@ -138,6 +145,19 @@ app.registerExtension({
       "新建并移入": "Create and move",
       "移动失败": "Move failed",
       "新建失败": "Create failed",
+      "⚙ 管理分类": "⚙ Categories",
+      "管理分类": "Manage categories",
+      "重命名": "Rename",
+      "删除分类": "Delete category",
+      "保存": "Save",
+      "取消": "Cancel",
+      "已重命名": "Renamed",
+      "重命名失败": "Rename failed",
+      "删除失败": "Delete failed",
+      "已删除分类": "Category deleted",
+      " 项已转为未分类": " assets became uncategorized",
+      "新建分类": "New category",
+      "已新建分类": "Category created",
       "图": "Img",
       "(未检测到提示词)": "(no prompt detected)",
       "没有匹配的产物": "No matching assets",
@@ -393,7 +413,9 @@ app.registerExtension({
     bindText(folderLbl, "文件夹");
     const catLbl = $el("span.lbl");
     bindText(catLbl, "分类");
-    const filtersRow = $el("div.asm-filters", {}, [folderLbl, folderSel, catLbl, catSel]);
+    const catManageBtn = $el("button.asm-btn", { onclick: openCategoryManager });
+    bindText(catManageBtn, "⚙ 管理分类");
+    const filtersRow = $el("div.asm-filters", {}, [folderLbl, folderSel, catLbl, catSel, catManageBtn]);
 
     function rebuildFolderOptions() {
       const counts = new Map();
@@ -687,6 +709,125 @@ app.registerExtension({
         categories = d.categories || categories;
         m.remove();
         await assignTo(ids, d.category.id);
+      };
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter") createBtn.click(); });
+      pn.appendChild($el("div.asm-newcat", {}, [input, createBtn]));
+      m.appendChild(pn);
+      document.body.appendChild(m);
+    }
+
+    // ---------- 分类管理: 新建 / 重命名 / 删除 ----------
+    async function renameCategory(id, name) {
+      name = (name || "").trim();
+      if (!name) return false;
+      const res = await fetch("/asset/category", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rename", id, name }),
+      });
+      const d = await res.json();
+      if (!d.ok) { statusMsg(terr(d.error) || t("重命名失败")); return false; }
+      categories = d.categories || categories;
+      rebuildCatOptions();
+      refresh();
+      statusMsg(t("已重命名"));
+      return true;
+    }
+
+    async function removeCategory(c) {
+      const n = runs.filter(r => r.category === c.id).length;
+      const msg = LANG === "zh"
+        ? ("删除分类「" + c.name + "」？\n\n该分类下的 " + n + " 项产物会变成「未分类」，文件不会被删除。")
+        : ('Delete category "' + c.name + '"?\n\n' + n + " assets will become uncategorized. Files are not deleted.");
+      if (!confirm(msg)) return false;
+      const res = await fetch("/asset/category", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", id: c.id }),
+      });
+      const d = await res.json();
+      if (!d.ok) { statusMsg(terr(d.error) || t("删除失败")); return false; }
+      categories = d.categories || [];
+      for (const r of runs) if (r.category === c.id) r.category = null;
+      rebuildCatOptions();
+      refresh();
+      statusMsg(t("已删除分类") + (d.cleared ? " · " + d.cleared + t(" 项已转为未分类") : ""));
+      return true;
+    }
+
+    function openCategoryManager() {
+      const m = $el("div.asm-modal", { style: { display: "flex" } });
+      m.appendChild($el("div.bk", { onclick: () => m.remove() }));
+      const pn = $el("div.pn", { style: { width: "min(560px,92vw)" } });
+      pn.appendChild($el("button.x", { textContent: "✕", onclick: () => m.remove() }));
+      pn.appendChild($el("h3", { textContent: t("管理分类") }));
+
+      const list = $el("div.asm-catlist");
+      let editingId = null;
+
+      function countOf(id) { return runs.filter(r => r.category === id).length; }
+
+      function renderList() {
+        list.innerHTML = "";
+        if (!categories.length) {
+          list.appendChild($el("div", {
+            style: { fontSize: "12px", color: "var(--descrip-text,#aaa)" },
+            textContent: t("还没有分类，在下面新建一个"),
+          }));
+          return;
+        }
+        for (const c of categories) {
+          if (editingId === c.id) {
+            const input = $el("input.asm-mini-input", { type: "text" });
+            input.value = c.name;
+            const save = $el("button.asm-mini", { textContent: t("保存") });
+            save.onclick = async () => {
+              if (await renameCategory(c.id, input.value)) { editingId = null; renderList(); }
+            };
+            const cancel = $el("button.asm-mini", { textContent: t("取消") });
+            cancel.onclick = () => { editingId = null; renderList(); };
+            input.addEventListener("keydown", (e) => {
+              if (e.key === "Enter") save.click();
+              if (e.key === "Escape") cancel.click();
+            });
+            list.appendChild($el("div.asm-catrow.manage", {}, [input, save, cancel]));
+            setTimeout(() => input.focus(), 0);
+          } else {
+            const rename = $el("button.asm-mini", { textContent: "✎", title: t("重命名") });
+            rename.onclick = () => { editingId = c.id; renderList(); };
+            const del = $el("button.asm-mini.danger", { textContent: "✕", title: t("删除分类") });
+            del.onclick = async () => { if (await removeCategory(c)) renderList(); };
+            list.appendChild($el("div.asm-catrow.manage", {}, [
+              $el("span.catname", { textContent: c.name }),
+              $el("span.catcount", { textContent: countOf(c.id) + t(" 项") }),
+              rename,
+              del,
+            ]));
+          }
+        }
+      }
+      renderList();
+      pn.appendChild(list);
+
+      const input = $el("input.asm-search", { type: "text" });
+      input.placeholder = t("新建分类名称");
+      const createBtn = $el("button.asm-btn.primary");
+      bindText(createBtn, "新建分类");
+      createBtn.onclick = async () => {
+        const name = input.value.trim();
+        if (!name) return;
+        const res = await fetch("/asset/category", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "create", name }),
+        });
+        const d = await res.json();
+        if (!d.ok) { statusMsg(terr(d.error) || t("新建失败")); return; }
+        categories = d.categories || categories;
+        input.value = "";
+        rebuildCatOptions();
+        renderList();
+        statusMsg(t("已新建分类"));
       };
       input.addEventListener("keydown", (e) => { if (e.key === "Enter") createBtn.click(); });
       pn.appendChild($el("div.asm-newcat", {}, [input, createBtn]));
